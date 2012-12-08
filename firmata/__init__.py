@@ -51,11 +51,11 @@ class Board(object):
       baud: A number representing the baud rate to use for serial communication.
       start_serial: If True, starts the serial IO thread right away. Default: False.
     """
-  self._io_thread = _IOThread(port, baud)
-  if start_serial:
-    self._io_thread.start()
-  self._out = self._io_thread.to_board
-  self._in = self._io_thread.from_board
+    self._io_thread = _IOThread(port, baud)
+    if start_serial:
+      self._io_thread.start()
+    self._out = self._io_thread.to_board
+    self._in = self._io_thread.from_board
 
 def FirmataInit(port, baud=57600):
   """Instantiate a `Board` object for a given serial port.
