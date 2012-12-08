@@ -16,7 +16,7 @@ setup(
   description = ("An API wrapper for the firmata wire protocol."),
   license = "MIT",
   keywords = "firmata arduino serial",
-  url = "https://github.com/swsnider/firmata",
+  url = "https://github.com/swsnider/firmata.py",
   packages=['firmata', 'tests'],
   long_description=read('README'),
   classifiers=[
