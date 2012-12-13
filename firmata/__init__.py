@@ -29,6 +29,11 @@ class Board(threading.Thread):
     """
     self.port = io.SerialPort(port=port, baud=baud, log_to_file=log_to_file, start_serial=start_serial)
     self.shutdown = False
+    self.firmware_version = 'Unknown'
+    self.firmware_name = 'Unknown'
+    self.errors = []
+    self.analog_channels = []
+    self.pin_config = []
 
   def StartCommunications(self):
     self.port.StartCommunications()
@@ -43,12 +48,46 @@ class Board(threading.Thread):
   def __del__(self):
     self.port.StopCommunications()
 
+  def DispatchToken(self, token):
+    token_type = token['token']
+    if token_type == 'ERROR':
+      self.errors.append(token['message'])
+      return True
+    if token_type == 'RESERVED_COMMAND':
+      self.errors.append('Unable to parse a reserved command: %s' % (repr(token)))
+      return False
+    if token_type == 'REPORT_FIRMWARE':
+      self.firmware_version = '%s.%s' % (token[major], token[minor])
+      self.firmware_name = token['name']
+      return True
+    if token_type == 'ANALOG_MAPPING_RESPONSE':
+      self.analog_channels = token['channels']
+      return True
+    if token_type == 'CAPABILITY_RESPONSE':
+      self.pin_config = token['pins']
+      self.pin_state = defaultdict(False)
+      return True
+    if token_type == 'ANALOG_MESSAGE':
+      self.pin_state['A%s' % analog_pin] = token['value']
+      return True
+    if token_type == 'DIGITAL_MESSAGE':
+      self.pin_state[token['pin']] = token['value']
+      return True
+    if token_type == 'PROTOCOL_VERSION':
+      self.firmware_version = '%s.%s' % (token[major], token[minor])
+      return True
+    self.errors.append('Unable to dispatch token: %s' % (repr(token)))
+    return False
+
   def run(self):
     while not self.shutdown:
+      token = None
       try:
-        self.port.reader.q.get(timeout=0.2)
+        token = self.port.reader.q.get(timeout=0.2)
       except Empty:
-        pass
+        continue
+      if not Token or not self.DispatchToken(token):
+        break
 
 
 def FirmataInit(port, baud=57600, log_to_file=None):
