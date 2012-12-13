@@ -1,12 +1,12 @@
 from Queue import Queue, Empty
 import serial
 import threading
+import time
 
 from firmata.constants import *
 
 
 READER_TIMEOUT = 0.2
-READER_CHUNK_SIZE = 100
 
 
 class SerialLogger(threading.Thread):
@@ -14,6 +14,7 @@ class SerialLogger(threading.Thread):
   def __init__(self, path):
     self._file = open(path, 'w')
     self.q = Queue()
+    super(SerialLogger, self).__init__()
 
   def run(self):
     """Consumes logging events from the queue and writes them to a file. `None` event is a signal to quit."""
@@ -33,13 +34,15 @@ class SerialWriter(threading.Thread):
     self._port = port
     self._log = log
     self.q = Queue()
+    super(SerialWriter, self).__init__()
 
   def run(self):
+    self._port.flushOutput()
     while True:
       w = self.q.get()
       if w is None:
         return
-      self._port.write(w)
+      self._port.write(chr(w))
       if self._log:
         self._log.put('>> %s (%s)' % (hex(w), CONST_R.get(w, 'UNKNOWN')))
       self.q.task_done()
@@ -63,22 +66,30 @@ class SerialReader(threading.Thread):
     self._pushback = []
     self.shutdown = False
     self.stopped = True
+    super(SerialReader, self).__init__()
 
-  def Next(self):
+  def Next(self, no_high=True):
+    if self.shutdown:
+      return None
     if not self._pushback:
       runes = None
       while not runes:
         if self.shutdown:
           raise ShutdownException()
-        runes = self._port.read(READER_CHUNK_SIZE)
+        if self._port.inWaiting() > 0:
+          runes = self._port.read()
+        else:
+          time.sleep(READER_TIMEOUT)
       self._pushback = [ord(rune) for rune in reversed(runes)]
-    rune = self._pushpack.pop()
+    rune = self._pushback.pop()
     if self._log:
       self._log.put('<< %s (%s)' % (hex(rune), CONST_R.get(rune, 'UNKNOWN')))
+    if no_high and rune > 0x80 and rune != SYSEX_END:
+      raise LexerException(self.Error('Unexpected byte with high bit set: %s. Attempting recovery.' % rune))
     return rune
 
-  def Peek(self):
-    rune = self.Next()
+  def Peek(self, no_high=True):
+    rune = self.Next(no_high)
     self.Backup(rune)
     return rune
 
@@ -89,10 +100,17 @@ class SerialReader(threading.Thread):
     self.q.put(token)
 
   def Error(self, message):
-    raise LexerException(message)
+    self.Emit(dict(token='ERROR', message=message))
+    return self.lexErrorRecover
+
+  def lexErrorRecover(self):
+    while self.Peek(False) > 0x80:  # Loop until next stanza (data internal to a command never has the high bit set).
+      self.Next(False)
+    if self.Peek(False) == SYSEX_END:  # Discard the SYSEX_END (if present) of a corrupted command.
+      self.Next(False)
+    return self.lexInitial
 
   def lexReservedCommand(self):
-    command = self.Next()
     data = []
     rune = self.Next()
     while rune != SYSEX_END:
@@ -106,7 +124,7 @@ class SerialReader(threading.Thread):
     name = []
     while rune_lsb != SYSEX_END:
       rune_msb = self.Next()
-      data.append(chr((rune_msb << 7) + rune_lsb))
+      name.append(chr((rune_msb << 7) + rune_lsb))
       rune_lsb = self.Next()
     self.Emit(dict(token='REPORT_FIRMWARE', major=major, minor=minor, name=''.join(name)))
     return self.lexInitial
@@ -134,14 +152,15 @@ class SerialReader(threading.Thread):
     return self.lexInitial
 
   def lexPinStateResponse(self):
-    self.Error('Pin State Response is unimplemented')
+    pin, mode = self.Next(), self.Next()
+    return self.Error('Pin State Response is unimplemented')
 
   def lexI2cReply(self):
-    self.Error('I2C Reply is unimplemented.')
+    return self.Error('I2C Reply is unimplemented.')
 
   def lexSysex(self):
-    _ = self.Next()
-    command = self.Next()
+    _ = self.Next(False)
+    command = self.Next(False)
     if command == SE_RESERVED_COMMAND:
       return self.lexReservedCommand
     if command == SE_ANALOG_MAPPING_RESPONSE:
@@ -154,16 +173,16 @@ class SerialReader(threading.Thread):
       return self.lexI2cReply
     if command == SE_REPORT_FIRMWARE:
       return self.lexReportFirmware
-    self.Error('State Sysex could not determine where to go from here given rune %s (%s)' % (hex(rune),
+    return self.Error('State Sysex could not determine where to go from here given rune %s (%s)' % (hex(rune),
         CONST_R.get(rune, 'UNKNOWN')))
 
   def lexAnalogMessage(self):
-    command, lsb, msb = self.Next(), self.Next(), self.Next()
+    command, lsb, msb = self.Next(False), self.Next(), self.Next()
     self.Emit(dict(token='ANALOG_MESSAGE', pin=(command-0xE0), value=(msb << 7) + lsb))
     return self.lexInitial
 
   def lexDigitalMessage(self):
-    command, lsb, msb = self.Next(), self.Next(), self.Next()
+    command, lsb, msb = self.Next(False), self.Next(), self.Next()
     bitmask = (msb << 7) + lsb
     dict(token='DIGITAL_MESSAGE', port=(command-0x90), pins=[])
     for pin_num in xrange(14):
@@ -173,24 +192,26 @@ class SerialReader(threading.Thread):
     return self.lexInitial
 
   def lexProtocolVersion(self):
-    _, major, minor = self.Next(), self.Next(), self.Next()
-    self.Emit(dict(token='PROTOCOL_VERSION', major=major, minor=minor)
+    major, minor = self.Next(), self.Next()
+    self.Emit(dict(token='PROTOCOL_VERSION', major=major, minor=minor))
     return self.lexInitial
 
   def lexInitial(self):
-    rune = self.Peek()
+    rune = self.Peek(False)
     if ANALOG_MESSAGE_0 <= rune <= ANALOG_MESSAGE_F:
       return self.lexAnalogMessage
     if DIGITAL_MESSAGE_0 <= rune <= DIGITAL_MESSAGE_F:
       return self.lexDigitalMessage
     if rune == PROTOCOL_VERSION:
+      self.Next(False)
       return self.lexProtocolVersion
     if rune == SYSEX_START:
       return self.lexSysex
-    self.Error('State Initial could not determine where to go from here given rune %s (%s)' % (hex(rune),
+    return self.Error('State Initial could not determine where to go from here given rune %s (%s)' % (hex(rune),
         CONST_R.get(rune, 'UNKNOWN')))
 
   def run(self):
+    self._port.flushInput()
     self.stopped = False
     state = self.lexInitial
     while not self.shutdown:
@@ -199,7 +220,8 @@ class SerialReader(threading.Thread):
       try:
         state = state()
       except LexerException, e:
-        print 'ERROR: %s' % e.message
+        state = e.message
+      except ShutdownException:
         break
     self.stopped = True
 
@@ -216,7 +238,7 @@ class SerialPort(object):
       start_serial: A boolean controlling whether the serial reader and writer threads are started as part of the
           constructor. Defaults to True.
     """
-    self._port = serial.Serial(port=port, baudrate=baud, timeout=READER_TIMEOUT)
+    self._port = serial.Serial(port=port, baudrate=baud)
     self._logger = None
     if log_to_file:
       self._logger = SerialLogger(log_to_file)
@@ -231,23 +253,12 @@ class SerialPort(object):
     self.reader.start()
     self.writer.start()
 
-  def GetToken(self, nowait=False):
-    """Gets a token of input from the Firmata device.
-
-    Args:
-      nowait: A boolean. If True, GetToken returns immediately. If False, GetToken blocks until a token is available.
-
-    Returns:
-      A FirmataToken or None if nowait is True and there are no Tokens immediately available.
-
-    Raises:
-      ShutdownException if the library should shut down cleanly because the reader has stopped.
-    """
-    if self.reader.stopped:
-      raise ShutdownException('Reader thread stopped.')
-    if nowait:
-      try:
-        return self.reader.q.get(False)
-      except Empty:
-        return None
-    return self.reader.q.get()
+  def StopCommunications(self):
+    """Stops the reader and writer threads for this serial port."""
+    self.reader.shutdown = True
+    self.writer.q.put(None)
+    self.writer.join()
+    self.reader.join()
+    if self._logger:
+      self._logger.q.put(None)
+      self._logger.join()
