@@ -39,12 +39,15 @@ class SerialWriter(threading.Thread):
   def run(self):
     self._port.flushOutput()
     while True:
-      w = self.q.get()
-      if w is None:
+      commands = self.q.get()
+      if commands is None:
         return
-      self._port.write(chr(w))
+      if type(commands) != list:
+        commands = list(commands)
+      for command in commands:
+        self._port.write(chr(command))
       if self._log:
-        self._log.put('>> %s (%s)' % (hex(w), CONST_R.get(w, 'UNKNOWN')))
+        self._log.put('>> %s (%s)' % (hex(command), CONST_R.get(command, 'UNKNOWN')))
       self.q.task_done()
 
 

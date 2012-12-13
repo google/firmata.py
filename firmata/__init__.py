@@ -11,55 +11,55 @@ go to space today if you create more than on on the same serial port.
 
 from Queue import Queue, Empty
 import sys
+import threading
 
 from firmata.constants import *
+from firmata import io
 
 
-class Board(object):
-  def __init__(self, port, baud, log=False, start_serial=False):
+class Board(threading.Thread):
+  def __init__(self, port, baud, log_to_file=None, start_serial=False):
     """Board object constructor. Should not be called directly.
 
     Args:
       port: The serial port to use. Expressed as either a string or an integer (see pyserial docs for more info.)
       baud: A number representing the baud rate to use for serial communication.
+      log_to_file: A string specifying the file to log serial events to, or None (the default) for no logging.
       start_serial: If True, starts the serial IO thread right away. Default: False.
     """
-    self._io_thread = _IOThread(port, baud, log=log)
-    self._out = self._io_thread.to_board
-    self._in = self._io_thread.from_board
-    self._in_condition = self._io_thread.from_board_condition
-    if start_serial:
-      self._io_thread.start()
+    self.port = io.SerialPort(port=port, baud=baud, log_to_file=log_to_file, start_serial=start_serial)
+    self.shutdown = False
 
-  def Init(self):
-    """Start serial port communications, and configure ourselves by processing a capability query."""
-    try:
-      [self._out.put(i) for i in (CONST['SYSEX_START'], CONST['SE_CAPABILITY_QUERY'], CONST['SYSEX_END'])]
-      self._out.join()
-      while True:
-        self._in_condition.acquire()  # In effect, this turns on cooperative multi-tasking with the IO thread.
-        inp = None
-        try:
-          inp = self._in.get(block=False)
-          print '%s (%s)' % (hex(inp), CONST_R.get(inp, ''))
-        except Empty:
-          self._in_condition.wait()
-          continue
-        self._in_condition.release()
-    except:
-      self._io_thread.shutdown = True
-      self._io_thread.join()
-      raise
+  def StartCommunications(self):
+    self.port.StartCommunications()
+    self.shutdown = False
+    self.start()
+
+  def StopCommunications(self):
+    self.port.StopCommunications()
+    self.shutdown = True
+    self.join()
+
+  def __del__(self):
+    self.port.StopCommunications()
+
+  def run(self):
+    while not self.shutdown:
+      try:
+        self.port.reader.q.get(timeout=0.2)
+      except Empty:
+        pass
 
 
-def FirmataInit(port, baud=57600, log=False):
+def FirmataInit(port, baud=57600, log_to_file=None):
   """Instantiate a `Board` object for a given serial port.
 
   Args:
     port: The serial port to use. Expressed as either a string or an integer (see pyserial docs for more info.)
     baud: A number representing the baud rate to use for serial communication.
+    log_to_file: A string specifying the file to log serial events to, or None (the default) for no logging.
 
   Returns:
     A Board object which implements the firmata protocol over the specified serial port.
   """
-  return Board(port, baud, log=log, start_serial=True)
+  return Board(port, baud, log_to_file=log_to_file, start_serial=True)
