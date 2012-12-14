@@ -38,11 +38,15 @@ class LexerTest(unittest.TestCase):
     super(LexerTest, self).tearDown()
     serial.Serial = self._real_serial
 
-  def test_ProtocolVersion(self):
+  def test_Basic(self):
     port = MockSerial()
-    port.data = [chr(i) for i in (PROTOCOL_VERSION, 0x5, 0x2)]
+    port.data = [chr(i) for i in (PROTOCOL_VERSION, 0x5, 0x2, SYSEX_START, SE_REPORT_FIRMWARE, 0x5, 0x2, 0x54, 0x0, 0x65, 0x0, 0x73, 0x0, 0x74, 0x0, SYSEX_END)]
     reader = io.SerialReader(port, None)
     state = reader.lexInitial()
     while state != reader.lexInitial:
       state = state()
     self.assertEqual(dict(token='PROTOCOL_VERSION', major=5, minor=2), reader.q.get())
+    state = reader.lexInitial()
+    while state != reader.lexInitial:
+      state = state()
+    self.assertEqual(dict(token='REPORT_FIRMWARE', major=5, minor=2, name='Test'), reader.q.get())
