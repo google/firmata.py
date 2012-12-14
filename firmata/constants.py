@@ -1,5 +1,13 @@
 """Constants used by the Firmata wire protocol."""
 
+
+MODE_INPUT = 0
+MODE_OUTPUT = 1
+MODE_ANALOG = 2
+MODE_PWM = 3
+MODE_SERVO = 4
+
+
 CONST = dict(
   ANALOG_MESSAGE_0 = 0xE0,
   ANALOG_MESSAGE_1 = 0xE1,
@@ -92,6 +100,8 @@ CONST = dict(
 #  SE_SYSEX_REALTIME = 0x7F, # MIDI Reserved for realtime messages
 )
 
+
 globals().update(CONST)
+
 
 CONST_R = {v:k for (k,v) in CONST.items()}
