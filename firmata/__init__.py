@@ -14,7 +14,7 @@ import sys
 import threading
 
 from firmata.constants import *
-from firmata import io
+from firmata.io import SerialPort
 
 
 class Board(threading.Thread):
@@ -27,7 +27,7 @@ class Board(threading.Thread):
       log_to_file: A string specifying the file to log serial events to, or None (the default) for no logging.
       start_serial: If True, starts the serial IO thread right away. Default: False.
     """
-    self.port = io.SerialPort(port=port, baud=baud, log_to_file=log_to_file, start_serial=start_serial)
+    self.port = SerialPort(port=port, baud=baud, log_to_file=log_to_file, start_serial=start_serial)
     self.shutdown = False
     self.firmware_version = 'Unknown'
     self.firmware_name = 'Unknown'
@@ -102,3 +102,5 @@ def FirmataInit(port, baud=57600, log_to_file=None):
     A Board object which implements the firmata protocol over the specified serial port.
   """
   return Board(port, baud, log_to_file=log_to_file, start_serial=True)
+
+__all__ = ['FirmataInit', 'Board', 'SerialPort'] + CONST_R.values()
