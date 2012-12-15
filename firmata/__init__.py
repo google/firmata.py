@@ -17,6 +17,9 @@ from firmata.constants import *
 from firmata.io import SerialPort
 
 
+class I2CNotEnabled(Exception): pass
+
+
 class Board(threading.Thread):
   def __init__(self, port, baud, log_to_file=None, start_serial=False):
     """Board object constructor. Should not be called directly.
@@ -34,6 +37,7 @@ class Board(threading.Thread):
     self.errors = []
     self.analog_channels = []
     self.pin_config = []
+    self.i2c_enabled = False
 
   def StartCommunications(self):
     self.port.StartCommunications()
@@ -78,6 +82,33 @@ class Board(threading.Thread):
       return True
     self.errors.append('Unable to dispatch token: %s' % (repr(token)))
     return False
+
+  def SendSysex(self, cmd, data):
+    self.port.writer.q.put([SE_START_SYSEX, cmd] + data + [SE_END_SYSEX))
+
+  def I2CConfig(self, delay):
+    self.SendSysex(SE_I2C_CONFIG, [delay])
+    self.i2c_enabled = True
+
+  def I2CRead(self, addr, reg, count, timeout=1):
+    if not self.i2c_enabled:
+      raise I2CNotEnabled
+    if reg:
+      self.SendSysex(SE_I2C_REQUEST, [addr, I2C_READ, reg, count])
+    else:
+      self.SendSysex(SE_I2C_REQUEST, [addr, I2C_READ, count])
+    if self.port.reader.i2c_reply_ready.wait(timeout):
+      pass # what now?
+    else:
+      return None
+
+  def I2CWrite(self, addr, reg, data):
+    if not self.i2c_enabled:
+      raise I2CNotEnabled
+    if reg:
+      self.SendSysex(I2C_REQUEST, [addr, I2C_WRITE, reg] + data])
+    else:
+      self.SendSysex(I2C_REQUEST, [addr, I2C_WRITE] + data])
 
   def run(self):
     while not self.shutdown:

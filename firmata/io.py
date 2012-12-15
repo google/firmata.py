@@ -69,6 +69,7 @@ class SerialReader(threading.Thread):
     self._pushback = []
     self.shutdown = False
     self.stopped = True
+    self.i2c_reply_ready = threading.Event()
     super(SerialReader, self).__init__()
 
   def Next(self, no_high=True):
@@ -159,7 +160,18 @@ class SerialReader(threading.Thread):
     return self.Error('Pin State Response is unimplemented')
 
   def lexI2cReply(self):
-    return self.Error('I2C Reply is unimplemented.')
+    address_lsb = self.Next()
+    address_msb = self.Next()
+    reg_lsb = self.Next()
+    reg_msb = self.Next()
+    rune = self.Next()
+    data = []
+    while rune != SYSEX_END:
+      data.append(rune)
+      rune = self.Next()
+    self.Emit(dict(token='I2C_REPLY', data=data))
+    self.i2c_reply_ready.set()
+    return self.lexInitial
 
   def lexSysex(self):
     _ = self.Next(False)
