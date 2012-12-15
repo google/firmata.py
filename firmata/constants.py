@@ -1,5 +1,13 @@
 """Constants used by the Firmata wire protocol."""
 
+
+MODE_INPUT = 0
+MODE_OUTPUT = 1
+MODE_ANALOG = 2
+MODE_PWM = 3
+MODE_SERVO = 4
+
+
 CONST = dict(
   ANALOG_MESSAGE_0 = 0xE0,
   ANALOG_MESSAGE_1 = 0xE1,
@@ -96,6 +104,8 @@ CONST = dict(
   I2C_WRITE = 0b00000000
 )
 
+
 globals().update(CONST)
+
 
 CONST_R = {v:k for (k,v) in CONST.items()}

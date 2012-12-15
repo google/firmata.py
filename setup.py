@@ -8,6 +8,9 @@ from setuptools import setup
 def read(fname):
   return open(os.path.join(os.path.dirname(__file__), fname)).read()
 
+def generateDeps(fname):
+  return open(os.path.join(os.path.dirname(__file__), fname)).readlines()
+
 setup(
   name = "firmata.py",
   version = "0.1",
@@ -18,13 +21,11 @@ setup(
   keywords = "firmata arduino serial",
   url = "https://github.com/swsnider/firmata.py",
   packages=['firmata', 'tests'],
-  long_description=read('README'),
+  long_description=read('README.md'),
   classifiers=[
     "Development Status :: 3 - Alpha",
     "Topic :: Utilities",
     "License :: OSI Approved :: MIT License",
   ],
-  install_requires=[
-    "pyserial>=2.6"
-  ]
+  install_requires=generateDeps('requirements.txt')
 )

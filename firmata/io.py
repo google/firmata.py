@@ -157,7 +157,14 @@ class SerialReader(threading.Thread):
 
   def lexPinStateResponse(self):
     pin, mode = self.Next(), self.Next()
-    return self.Error('Pin State Response is unimplemented')
+    data = []
+    token = dict(token='PIN_STATE_RESPONSE', pin=pin, mode=mode, data=[])
+    rune = self.Next()
+    while rune != SYSEX_END:
+      data.append(rune)
+    token['data'] = sum([data[i] << (7 * i) for i in xrange(len(data))])
+    self.Emit(token)
+    return self.lexInitial
 
   def lexI2cReply(self):
     address_lsb = self.Next()
