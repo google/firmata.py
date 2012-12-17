@@ -120,9 +120,9 @@ class Board(threading.Thread):
     if not self.i2c_enabled:
       raise I2CNotEnabled()
     if reg:
-      self.SendSysex(I2C_REQUEST, [addr, I2C_WRITE, reg] + data])
+      self.SendSysex(I2C_REQUEST, [addr, I2C_WRITE, reg] + data)
     else:
-      self.SendSysex(I2C_REQUEST, [addr, I2C_WRITE] + data])
+      self.SendSysex(I2C_REQUEST, [addr, I2C_WRITE] + data)
 
   def run(self):
     while not self.shutdown:

@@ -100,7 +100,7 @@ CONST = dict(
 #  SE_SYSEX_REALTIME = 0x7F, # MIDI Reserved for realtime messages
 
   # I2C command constants
-  I2C_READ = 0b00001000
+  I2C_READ = 0b00001000,
   I2C_WRITE = 0b00000000
 )
 
