@@ -94,7 +94,7 @@ class Board(threading.Thread):
     return False
 
   def SendSysex(self, cmd, data):
-    self.port.writer.q.put([SE_START_SYSEX, cmd] + data + [SE_END_SYSEX))
+    self.port.writer.q.put([SE_START_SYSEX, cmd] + data + [SE_END_SYSEX])
 
   def I2CConfig(self, delay):
     self.SendSysex(SE_I2C_CONFIG, [delay])
