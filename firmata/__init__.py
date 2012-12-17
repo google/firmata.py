@@ -86,7 +86,7 @@ class Board(threading.Thread):
         token['pin'] = 'A%s' % token['pin']
       self.pin_state[token['pin']] = token['data']
       return True
-      if token_type == 'I2C_REPLY':
+    if token_type == 'I2C_REPLY':
       self.i2c_reply = token['data']
       self.i2c_reply_ready.set()
       return True
