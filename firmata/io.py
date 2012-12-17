@@ -250,11 +250,13 @@ class SerialPort(object):
     """
     self._port = serial.Serial(port=port, baudrate=baud)
     self._logger = None
+    logger_q = None
     if log_to_file:
       self._logger = SerialLogger(log_to_file)
       self._logger.start()
-    self.reader = SerialReader(self._port, self._logger.q)
-    self.writer = SerialWriter(self._port, self._logger.q)
+      logger_q = self._logger.q
+    self.reader = SerialReader(self._port, self.logger_q)
+    self.writer = SerialWriter(self._port, self.logger_q)
     if start_serial:
       self.StartCommunications()
 

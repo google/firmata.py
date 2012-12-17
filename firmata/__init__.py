@@ -91,7 +91,7 @@ class Board(threading.Thread):
         token = self.port.reader.q.get(timeout=0.2)
       except Empty:
         continue
-      if not Token or not self.DispatchToken(token):
+      if not token or not self.DispatchToken(token):
         break
 
 
