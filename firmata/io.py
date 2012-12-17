@@ -167,17 +167,20 @@ class SerialReader(threading.Thread):
     return self.lexInitial
 
   def lexI2cReply(self):
-    address_lsb = self.Next()
-    address_msb = self.Next()
-    reg_lsb = self.Next()
-    reg_msb = self.Next()
-    rune = self.Next()
+    rune_lsb = self.Next()
+    rune_msb = self.Next()
+    addr = chr((rune_msb << 7) + rune_lsb)
+    rune_lsb = self.Next()
+    rune_msb = self.Next()
+    reg = chr((rune_msb << 7) + rune_lsb)
+    
+    rune_lsb = self.Next()
     data = []
-    while rune != SYSEX_END:
-      data.append(rune)
-      rune = self.Next()
-    self.Emit(dict(token='I2C_REPLY', data=data))
-    self.i2c_reply_ready.set()
+    while rune_lsb != SYSEX_END:
+      rune_msb = self.Next()
+      data.append(chr((rune_msb << 7) + rune_lsb))
+      rune_lsb = self.Next()
+    self.Emit(dict(token='I2C_REPLY', addr=addr, reg=reg, data=data))
     return self.lexInitial
 
   def lexSysex(self):

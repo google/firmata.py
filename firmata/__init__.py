@@ -38,6 +38,7 @@ class Board(threading.Thread):
     self.analog_channels = []
     self.pin_config = []
     self.i2c_enabled = False
+    self.i2c_reply = None
 
   def StartCommunications(self):
     self.port.StartCommunications()
@@ -85,6 +86,10 @@ class Board(threading.Thread):
         token['pin'] = 'A%s' % token['pin']
       self.pin_state[token['pin']] = token['data']
       return True
+      if token_type == 'I2C_REPLY':
+      self.i2c_reply = token['data']
+      self.i2c_reply_ready.set()
+      return True
     self.errors.append('Unable to dispatch token: %s' % (repr(token)))
     return False
 
@@ -93,23 +98,27 @@ class Board(threading.Thread):
 
   def I2CConfig(self, delay):
     self.SendSysex(SE_I2C_CONFIG, [delay])
+    self.i2c_reply_ready = threading.Event()
+    # disable local copy of i2c pins
     self.i2c_enabled = True
 
   def I2CRead(self, addr, reg, count, timeout=1):
+    assert addr < 0x80
     if not self.i2c_enabled:
-      raise I2CNotEnabled
+      raise I2CNotEnabled()
     if reg:
       self.SendSysex(SE_I2C_REQUEST, [addr, I2C_READ, reg, count])
     else:
       self.SendSysex(SE_I2C_REQUEST, [addr, I2C_READ, count])
-    if self.port.reader.i2c_reply_ready.wait(timeout):
-      pass # what now?
+    if self.i2c_reply_ready.wait(timeout):
+      return self.i2c_reply
     else:
       return None
 
   def I2CWrite(self, addr, reg, data):
+    assert addr < 0x80
     if not self.i2c_enabled:
-      raise I2CNotEnabled
+      raise I2CNotEnabled()
     if reg:
       self.SendSysex(I2C_REQUEST, [addr, I2C_WRITE, reg] + data])
     else:
