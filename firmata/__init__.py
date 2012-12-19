@@ -39,7 +39,7 @@ class Board(threading.Thread):
     self.pin_config = []
     self._listeners = collections.defaultdict(list)
     self._listeners_lock = threading.Lock()
-    self.pin_state = dict()
+    self.pin_state = collections.defaultdict(lambda: False)
     self.i2c_enabled = False
     self.i2c_reply = None
     super(Board, self).__init__()
@@ -107,7 +107,6 @@ class Board(threading.Thread):
       return True
     if token_type == 'CAPABILITY_RESPONSE':
       self.pin_config = token['pins']
-      self.pin_state = collections.defaultdict(lambda: False)
       return True
     if token_type == 'ANALOG_MESSAGE':
       self.pin_state['A%s' % token['pin']] = token['value']
@@ -122,6 +121,11 @@ class Board(threading.Thread):
     if token_type == 'PIN_STATE_RESPONSE':
       if token['mode'] == MODE_ANALOG:
         token['pin'] = 'A%s' % token['pin']
+      else:
+        pin_nr = token['pin']
+        pin = pin_nr % 16
+        port = (pin_nr - pin) / 16
+        token['pin'] = '%s:%s' % (port, pin)
       self.pin_state[token['pin']] = token['data']
       return True
     if token_type == 'I2C_REPLY':
