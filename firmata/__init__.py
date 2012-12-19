@@ -18,6 +18,9 @@ from firmata.constants import *
 from firmata.io import SerialPort
 
 
+class I2CNotEnabled(Exception): pass
+
+
 class Board(threading.Thread):
   def __init__(self, port, baud, log_to_file=None, start_serial=False):
     """Board object constructor. Should not be called directly.
@@ -37,6 +40,8 @@ class Board(threading.Thread):
     self.pin_config = []
     self._listeners = collections.defaultdict(list)
     self._listeners_lock = threading.Lock()
+    self.i2c_enabled = False
+    self.i2c_reply = None
 
   def StartCommunications(self):
     """Starts all the threads needed to communicate with the physical board."""
@@ -116,8 +121,43 @@ class Board(threading.Thread):
         token['pin'] = 'A%s' % token['pin']
       self.pin_state[token['pin']] = token['data']
       return True
+    if token_type == 'I2C_REPLY':
+      self.i2c_reply = token['data']
+      self.i2c_reply_ready.set()
+      return True
     self.errors.append('Unable to dispatch token: %s' % (repr(token)))
     return False
+
+  def SendSysex(self, cmd, data):
+    self.port.writer.q.put([SE_START_SYSEX, cmd] + data + [SE_END_SYSEX])
+
+  def I2CConfig(self, delay):
+    self.SendSysex(SE_I2C_CONFIG, [delay])
+    self.i2c_reply_ready = threading.Event()
+    # disable local copy of i2c pins
+    self.i2c_enabled = True
+
+  def I2CRead(self, addr, reg, count, timeout=1):
+    assert addr < 0x80
+    if not self.i2c_enabled:
+      raise I2CNotEnabled()
+    if reg:
+      self.SendSysex(SE_I2C_REQUEST, [addr, I2C_READ, reg, count])
+    else:
+      self.SendSysex(SE_I2C_REQUEST, [addr, I2C_READ, count])
+    if self.i2c_reply_ready.wait(timeout):
+      return self.i2c_reply
+    else:
+      return None
+
+  def I2CWrite(self, addr, reg, data):
+    assert addr < 0x80
+    if not self.i2c_enabled:
+      raise I2CNotEnabled()
+    if reg:
+      self.SendSysex(I2C_REQUEST, [addr, I2C_WRITE, reg] + data)
+    else:
+      self.SendSysex(I2C_REQUEST, [addr, I2C_WRITE] + data)
 
   def run(self):
     """Reads tokens as they come in, and dispatches them appropriately. If an error occurs, the thread terminates."""

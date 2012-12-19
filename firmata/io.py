@@ -70,6 +70,7 @@ class SerialReader(threading.Thread):
     self._pushback = []
     self.shutdown = False
     self.stopped = True
+    self.i2c_reply_ready = threading.Event()
     super(SerialReader, self).__init__()
 
   def Next(self, no_high=True):
@@ -167,7 +168,21 @@ class SerialReader(threading.Thread):
     return self.lexInitial
 
   def lexI2cReply(self):
-    return self.Error('I2C Reply is unimplemented.')
+    rune_lsb = self.Next()
+    rune_msb = self.Next()
+    addr = chr((rune_msb << 7) + rune_lsb)
+    rune_lsb = self.Next()
+    rune_msb = self.Next()
+    reg = chr((rune_msb << 7) + rune_lsb)
+    
+    rune_lsb = self.Next()
+    data = []
+    while rune_lsb != SYSEX_END:
+      rune_msb = self.Next()
+      data.append(chr((rune_msb << 7) + rune_lsb))
+      rune_lsb = self.Next()
+    self.Emit(dict(token='I2C_REPLY', addr=addr, reg=reg, data=data))
+    return self.lexInitial
 
   def lexSysex(self):
     _ = self.Next(False)
