@@ -6,14 +6,14 @@ from setuptools import setup
 # README file and 2) it's easier to type in the README file than to put a raw
 # string in below ...
 def read(fname):
-  return open(os.path.join(os.path.dirname(__file__), fname)).read()
-
-def generateDeps(fname):
-  return open(os.path.join(os.path.dirname(__file__), fname)).readlines()
+  try:
+    return open(os.path.join(os.path.dirname(__file__), fname)).read()
+  except:
+    return ''
 
 setup(
   name = "firmata.py",
-  version = "0.1",
+  version = "0.1.1",
   author = "Silas Snider",
   author_email = "swsnider@gmail.com",
   description = ("An API wrapper for the firmata wire protocol."),
@@ -27,5 +27,8 @@ setup(
     "Topic :: Utilities",
     "License :: OSI Approved :: MIT License",
   ],
-  install_requires=generateDeps('requirements.txt')
+  install_requires=[
+    "pyserial>=2.6",
+    "unittest2"
+  ]
 )
