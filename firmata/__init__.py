@@ -9,6 +9,7 @@ the previously mentioned `FirmataInit()` function. You can create as many Board 
 go to space today if you create more than on on the same serial port.
 """
 
+import collections
 from Queue import Queue, Empty
 import sys
 import threading
@@ -34,13 +35,17 @@ class Board(threading.Thread):
     self.errors = []
     self.analog_channels = []
     self.pin_config = []
+    self._listeners = collections.defaultdict(list)
+    self._listeners_lock = threading.Lock()
 
   def StartCommunications(self):
+    """Starts all the threads needed to communicate with the physical board."""
     self.port.StartCommunications()
     self.shutdown = False
     self.start()
 
   def StopCommunications(self):
+    """Stops communication with the board, and returns only after all communication has ceased."""
     self.port.StopCommunications()
     self.shutdown = True
     self.join()
@@ -48,8 +53,38 @@ class Board(threading.Thread):
   def __del__(self):
     self.port.StopCommunications()
 
+  def AddListener(self, token_type, listener):
+    """Add a callable to be called the next time a particular token_type is received.
+
+    Args:
+      token_type: A string. The type of token to listen for.
+      listener: A callable taking one argument (a token), which returns True if normal dispatch should be aborted, or
+          False otherwise. The callable will be called at most once.
+    """
+    self._listeners_lock.acquire()
+    self._listeners[token_type].append(listener)
+    self._listeners_lock.release()
+
   def DispatchToken(self, token):
+    """Given a token, mutates Board state and calls listeners as appropriate.
+
+    Args:
+      token: A dictionary. The token to dispatch.
+    Returns:
+      A boolean indicating success (True) or failure (False). On failure, an error will have been appended to the error
+      queue.
+    """
     token_type = token['token']
+    self._listeners_lock.acquire()
+    my_listeners = self._listeners.get(token_type, [])
+    del self._listeners[token_type]
+    self._listeners_lock.release()
+    abort_regular_execution = False
+    for l in my_listeners:
+      if l(token):
+        abort_regular_execution = True
+    if abort_regular_execution:
+      return True
     if token_type == 'ERROR':
       self.errors.append(token['message'])
       return True
@@ -65,7 +100,7 @@ class Board(threading.Thread):
       return True
     if token_type == 'CAPABILITY_RESPONSE':
       self.pin_config = token['pins']
-      self.pin_state = defaultdict(False)
+      self.pin_state = collections.defaultdict(lambda: False)
       return True
     if token_type == 'ANALOG_MESSAGE':
       self.pin_state['A%s' % analog_pin] = token['value']
@@ -85,6 +120,7 @@ class Board(threading.Thread):
     return False
 
   def run(self):
+    """Reads tokens as they come in, and dispatches them appropriately. If an error occurs, the thread terminates."""
     while not self.shutdown:
       token = None
       try:

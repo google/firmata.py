@@ -37,6 +37,7 @@ class SerialWriter(threading.Thread):
     super(SerialWriter, self).__init__()
 
   def run(self):
+    """Writes all the bytes from `q` to the serial port, aborting if it encounters `None` on the queue"""
     self._port.flushOutput()
     while True:
       commands = self.q.get()
