@@ -120,6 +120,7 @@ class SerialReader(threading.Thread):
     rune = self.Next()
     while rune != SYSEX_END:
       data.append(rune)
+      rune = self.Next()
     self.Emit(dict(token='RESERVED_COMMAND', data=data))
     return self.lexInitial
 
@@ -139,6 +140,7 @@ class SerialReader(threading.Thread):
     rune = self.Next()
     while rune != SYSEX_END:
       pin_channels.append(rune if rune != 127 else False)
+      rune = self.Next()
     self.Emit(dict(token='ANALOG_MAPPING_RESPONSE', channels=pin_channels))
     return self.lexInitial
 
@@ -163,6 +165,7 @@ class SerialReader(threading.Thread):
     rune = self.Next()
     while rune != SYSEX_END:
       data.append(rune)
+      rune = self.Next()
     token['data'] = sum([data[i] << (7 * i) for i in xrange(len(data))])
     self.Emit(token)
     return self.lexInitial
@@ -174,7 +177,7 @@ class SerialReader(threading.Thread):
     rune_lsb = self.Next()
     rune_msb = self.Next()
     reg = chr((rune_msb << 7) + rune_lsb)
-    
+
     rune_lsb = self.Next()
     data = []
     while rune_lsb != SYSEX_END:
@@ -210,9 +213,9 @@ class SerialReader(threading.Thread):
   def lexDigitalMessage(self):
     command, lsb, msb = self.Next(False), self.Next(), self.Next()
     bitmask = (msb << 7) + lsb
-    dict(token='DIGITAL_MESSAGE', port=(command-0x90), pins=[])
+    token_dict = dict(token='DIGITAL_MESSAGE', port=(command-0x90), pins=[])
     for pin_num in xrange(14):
-      token_dict['pins'][pin_num] = ((bitmask % 2) == 1)
+      token_dict['pins'].append((bitmask % 2) == 1)
       bitmask = bitmask >> 1
     self.Emit(token_dict)
     return self.lexInitial
@@ -271,8 +274,8 @@ class SerialPort(object):
       self._logger = SerialLogger(log_to_file)
       self._logger.start()
       logger_q = self._logger.q
-    self.reader = SerialReader(self._port, self.logger_q)
-    self.writer = SerialWriter(self._port, self.logger_q)
+    self.reader = SerialReader(self._port, logger_q)
+    self.writer = SerialWriter(self._port, logger_q)
     if start_serial:
       self.StartCommunications()
 

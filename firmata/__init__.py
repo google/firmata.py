@@ -11,7 +11,6 @@ go to space today if you create more than on on the same serial port.
 
 import collections
 from Queue import Queue, Empty
-import sys
 import threading
 
 from firmata.constants import *
@@ -40,8 +39,10 @@ class Board(threading.Thread):
     self.pin_config = []
     self._listeners = collections.defaultdict(list)
     self._listeners_lock = threading.Lock()
+    self.pin_state = dict()
     self.i2c_enabled = False
     self.i2c_reply = None
+    super(Board, self).__init__()
 
   def StartCommunications(self):
     """Starts all the threads needed to communicate with the physical board."""
@@ -82,7 +83,8 @@ class Board(threading.Thread):
     token_type = token['token']
     self._listeners_lock.acquire()
     my_listeners = self._listeners.get(token_type, [])
-    del self._listeners[token_type]
+    if self._listeners[token_type]:
+      del self._listeners[token_type]
     self._listeners_lock.release()
     abort_regular_execution = False
     for l in my_listeners:
@@ -97,7 +99,7 @@ class Board(threading.Thread):
       self.errors.append('Unable to parse a reserved command: %s' % (repr(token)))
       return False
     if token_type == 'REPORT_FIRMWARE':
-      self.firmware_version = '%s.%s' % (token[major], token[minor])
+      self.firmware_version = '%s.%s' % (token['major'], token['minor'])
       self.firmware_name = token['name']
       return True
     if token_type == 'ANALOG_MAPPING_RESPONSE':
@@ -108,13 +110,14 @@ class Board(threading.Thread):
       self.pin_state = collections.defaultdict(lambda: False)
       return True
     if token_type == 'ANALOG_MESSAGE':
-      self.pin_state['A%s' % analog_pin] = token['value']
+      self.pin_state['A%s' % token['pin']] = token['value']
       return True
     if token_type == 'DIGITAL_MESSAGE':
-      self.pin_state[token['pin']] = token['value']
+      for pin in xrange(1, len(token['pins'])+1):
+        self.pin_state['%s:%s' % (token['port'], pin)] = token['pins'][pin-1]
       return True
     if token_type == 'PROTOCOL_VERSION':
-      self.firmware_version = '%s.%s' % (token[major], token[minor])
+      self.firmware_version = '%s.%s' % (token['major'], token['minor'])
       return True
     if token_type == 'PIN_STATE_RESPONSE':
       if token['mode'] == MODE_ANALOG:
