@@ -6,6 +6,9 @@ MODE_OUTPUT = 1
 MODE_ANALOG = 2
 MODE_PWM = 3
 MODE_SERVO = 4
+# I2C command constants
+I2C_READ = 0b00001000,
+I2C_WRITE = 0b00000000
 
 
 CONST = dict(
@@ -98,10 +101,6 @@ CONST = dict(
   SE_SAMPLING_INTERVAL = 0x7A, # sampling interval
 #  SE_SYSEX_NON_REALTIME = 0x7E, # MIDI Reserved for non-realtime messages
 #  SE_SYSEX_REALTIME = 0x7F, # MIDI Reserved for realtime messages
-
-  # I2C command constants
-  I2C_READ = 0b00001000,
-  I2C_WRITE = 0b00000000
 )
 
 

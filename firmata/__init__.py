@@ -59,13 +59,14 @@ class Board(threading.Thread):
   def __del__(self):
     self.port.StopCommunications()
 
-  def AddListener(self, token_type, listener):
+  def AddListener(self, token_type, listener, is_permanent=False):
     """Add a callable to be called the next time a particular token_type is received.
 
     Args:
       token_type: A string. The type of token to listen for.
-      listener: A callable taking one argument (a token), which returns True if normal dispatch should be aborted, or
-          False otherwise. The callable will be called at most once.
+      listener: A callable taking one argument (a token), which returns a tuple (delete, abort). If delete is True,
+          the callable will be deleted. If abort is True, the normal processing of this token will cease after
+          callbacks are called.
     """
     self._listeners_lock.acquire()
     self._listeners[token_type].append(listener)
@@ -85,11 +86,14 @@ class Board(threading.Thread):
     my_listeners = self._listeners.get(token_type, [])
     if self._listeners[token_type]:
       del self._listeners[token_type]
-    self._listeners_lock.release()
     abort_regular_execution = False
     for l in my_listeners:
-      if l(token):
+      delete, abort = l(token)
+      if abort:
         abort_regular_execution = True
+      if not delete:
+        self._listeners.append(l)
+    self._listeners_lock.release()
     if abort_regular_execution:
       return True
     if token_type == 'ERROR':
