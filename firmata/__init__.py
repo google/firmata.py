@@ -12,6 +12,7 @@ go to space today if you create more than on on the same serial port.
 import collections
 from Queue import Queue, Empty
 import threading
+import time
 
 from firmata.constants import *
 from firmata.io import SerialPort
@@ -21,31 +22,56 @@ class I2CNotEnabled(Exception): pass
 
 
 class I2CDevice(object):
+  """Encapsulates I2C functionality."""
   def __init__(self, board):
+    """Construct an I2CDevice and add a listener."""
     self.replies = Queue()
     self._shutdown = False
     self._board = board
     def I2CListener(token):
       self.replies.put(token)
       return (False, True)
+    self._board.AddListener('I2C_REPLY', I2CListener)
 
   def I2CWrite(self, addr, reg, data):
+    """Send an I2C write command.
+
+    Args:
+      addr: A byte. An I2C address. Must be less than 0x80.
+      reg: A byte. The I2C register to which to write. Set to None to exclude it.
+      data: A bytearray/list/string. The data to write to the I2C bus.
+    """
     assert addr < 0x80
-    if reg:
+    if reg is not None:
       self._board.SendSysex(I2C_REQUEST, [addr, I2C_WRITE, reg] + data)
     else:
       self._board.SendSysex(I2C_REQUEST, [addr, I2C_WRITE] + data)
 
   def I2CRead(self, addr, reg, count, timeout=1):
+    """Send an I2C write command.
+
+    Args:
+      addr: A byte. An I2C address. Must be less than 0x80.
+      reg: A byte. The I2C register to which to write. Set to None to exclude it.
+      count: A number. The number of bytes of to read from the I2C bus.
+      timeout: A number. The number of seconds to wait to receieve I2C traffic before giving up.
+
+    Returns:
+      A list of tokens received from the device before the timeout.
+    """
     assert addr < 0x80
-    if reg:
+    if reg is not None:
       self._board.SendSysex(SE_I2C_REQUEST, [addr, I2C_READ, reg, count])
     else:
       self._board.SendSysex(SE_I2C_REQUEST, [addr, I2C_READ, count])
-    try:
-      return self.replies.get(timeout=timeout)
-    except Empty:
-      return None
+    receieved = []
+    start_t = time.time()
+    while time.time() - timeout < start_t:
+      try:
+        receieved.append(self.replies.get(timeout=timeout))
+      except Empty:
+        continue
+    return receieved
 
 class Board(threading.Thread):
   def __init__(self, port, baud, log_to_file=None, start_serial=False):
@@ -85,7 +111,7 @@ class Board(threading.Thread):
   def __del__(self):
     self.port.StopCommunications()
 
-  def AddListener(self, token_type, listener, is_permanent=False):
+  def AddListener(self, token_type, listener):
     """Add a callable to be called the next time a particular token_type is received.
 
     Args:
