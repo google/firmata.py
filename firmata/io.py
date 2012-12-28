@@ -47,10 +47,10 @@ class SerialWriter(threading.Thread):
         commands = [commands]
       if type(commands) != list:
         commands = list(commands)
+      self._port.write(''.join([chr(command) for command in commands]))
       for command in commands:
-        self._port.write(''.join([chr(command) for command in commands]))
-      if self._log:
-        self._log.put('>> %s (%s)' % (hex(command), CONST_R.get(command, 'UNKNOWN')))
+        if self._log:
+          self._log.put('>> %s (%s)' % (hex(command), CONST_R.get(command, 'UNKNOWN')))
       self.q.task_done()
 
 
