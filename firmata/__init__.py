@@ -100,9 +100,22 @@ class Board(threading.Thread):
 
   def StartCommunications(self):
     """Starts all the threads needed to communicate with the physical board."""
+    wait_for_serial = False
+    if self.firmware_name == 'Unknown':
+      wait_for_serial = threading.Condition()
+      def FirmwareReportListener(token):
+        wait_for_serial.acquire()
+        wait_for_serial.notify_all()
+        wait_for_serial.release()
+        return (True, False)
+      self.AddListener('REPORT_FIRMWARE', FirmwareReportListener)
     self.port.StartCommunications()
     self.shutdown = False
     self.start()
+    if wait_for_serial:
+      wait_for_serial.acquire()
+      wait_for_serial.wait()
+      wait_for_serial.release()
 
   def StopCommunications(self):
     """Stops communication with the board, and returns only after all communication has ceased."""
