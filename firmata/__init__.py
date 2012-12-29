@@ -95,6 +95,8 @@ class Board(threading.Thread):
     self.pin_state = collections.defaultdict(lambda: False)
     self._i2c_device = I2CDevice(self)
     super(Board, self).__init__()
+    if start_serial:
+      self.StartCommunications()
 
   def StartCommunications(self):
     """Starts all the threads needed to communicate with the physical board."""

@@ -43,6 +43,8 @@ class SerialWriter(threading.Thread):
       commands = self.q.get()
       if commands is None:
         return
+      if type(commands) == int:
+        commands = [commands]
       if type(commands) != list:
         commands = list(commands)
       for command in commands:
@@ -281,8 +283,10 @@ class SerialPort(object):
 
   def StartCommunications(self):
     """Starts the reader and writer threads for this serial port."""
-    self.reader.start()
-    self.writer.start()
+    if not self.reader.is_alive():
+      self.reader.start()
+    if not self.writer.is_alive():
+      self.writer.start()
 
   def StopCommunications(self):
     """Stops the reader and writer threads for this serial port."""

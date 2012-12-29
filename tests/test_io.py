@@ -44,7 +44,8 @@ class LexerTest(unittest.TestCase):
   def setUp(self):
     super(LexerTest, self).setUp()
     self._real_serial = serial.Serial
-    serial.Serial = MockSerial
+    self._port = MockSerial()
+    serial.Serial = lambda *args,**kargs: self._port
 
   def tearDown(self):
     super(LexerTest, self).tearDown()
@@ -64,9 +65,8 @@ class LexerTest(unittest.TestCase):
     self.assertEqual(dict(token='REPORT_FIRMWARE', major=5, minor=2, name='Test'), reader.q.get())
 
   def test_Mondo(self):
-    board = firmata.Board('', 10, log_to_file=None, start_serial=False)
-    board.port._port.data = MONDO_DATA[:]
-    board.StartCommunications()
+    self._port.data = MONDO_DATA[:]
+    board = firmata.FirmataInit('', 10, log_to_file=None)
     board.join()
     board.StopCommunications()
     self.assertEqual(len(board.errors), 1)
