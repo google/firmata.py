@@ -47,10 +47,10 @@ class SerialWriter(threading.Thread):
         commands = [commands]
       if type(commands) != list:
         commands = list(commands)
+      self._port.write(''.join([chr(command) for command in commands]))
       for command in commands:
-        self._port.write(''.join([chr(command) for command in commands]))
-      if self._log:
-        self._log.put('>> %s (%s)' % (hex(command), CONST_R.get(command, 'UNKNOWN')))
+        if self._log:
+          self._log.put('>> %s (%s)' % (hex(command), CONST_R.get(command, 'UNKNOWN')))
       self.q.task_done()
 
 
@@ -88,9 +88,10 @@ class SerialReader(threading.Thread):
         else:
           time.sleep(READER_TIMEOUT)
       self._pushback = [ord(rune) for rune in reversed(runes)]
+      if self._log:
+        for rune in self._pushback:
+          self._log.put('<< %s (%s)' % (hex(rune), CONST_R.get(rune, 'UNKNOWN')))
     rune = self._pushback.pop()
-    if self._log:
-      self._log.put('<< %s (%s)' % (hex(rune), CONST_R.get(rune, 'UNKNOWN')))
     if no_high and rune > 0x80 and rune != SYSEX_END:
       raise LexerException(self.Error('Unexpected byte with high bit set: %s. Attempting recovery.' % rune))
     return rune
