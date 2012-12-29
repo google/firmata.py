@@ -202,12 +202,38 @@ class Board(threading.Thread):
     self.errors.append('Unable to dispatch token: %s' % (repr(token)))
     return False
 
-  def SendSysex(self, cmd, data):
-    self.port.writer.q.put([SE_START_SYSEX, cmd] + data + [SE_END_SYSEX])
+  def SendSysex(self, cmd, data=None):
+    if data:
+      self.port.writer.q.put([SYSEX_START, cmd] + data + [SYSEX_END])
+    else:
+      self.port.writer.q.put([SYSEX_START, cmd, SYSEX_END])
 
   def I2CConfig(self, delay):
     self.SendSysex(SE_I2C_CONFIG, [delay])
+    # TODO: disable local copies of i2c pins
     return self._i2c_device
+
+  def QueryCapabilities(self):
+    wait_capabiity_response = False
+    if not self.pin_config:
+      wait_capabiity_response = threading.Condition()
+      def CapabilityResponseListener(token):
+        wait_capabiity_response.acquire()
+        wait_capabiity_response.notify_all()
+        wait_capabiity_response.release()
+        return (True, False)
+      self.AddListener('CAPABILITY_RESPONSE', CapabilityResponseListener)
+    self.SendSysex(SE_CAPABILITY_QUERY)
+    if wait_capabiity_response:
+      wait_capabiity_response.acquire()
+      wait_capabiity_response.wait()
+      wait_capabiity_response.release()
+
+  def QueryProtocolVersion(self):
+    self.port.writer.q.put([PROTOCOL_VERSION])
+
+  def QueryFirmwareVersionAndString(self, wait=True):
+    self.SendSysex(SE_REPORT_FIRMWARE)
 
   def run(self):
     """Reads tokens as they come in, and dispatches them appropriately. If an error occurs, the thread terminates."""
@@ -232,6 +258,8 @@ def FirmataInit(port, baud=57600, log_to_file=None):
   Returns:
     A Board object which implements the firmata protocol over the specified serial port.
   """
-  return Board(port, baud, log_to_file=log_to_file, start_serial=True)
+  board = Board(port, baud, log_to_file=log_to_file, start_serial=True)
+  board.QueryCapabilities()
+  return board
 
 __all__ = ['FirmataInit', 'Board', 'SerialPort'] + CONST_R.values()
