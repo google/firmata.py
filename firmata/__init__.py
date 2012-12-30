@@ -92,7 +92,8 @@ class Board(threading.Thread):
     self.pin_config = []
     self._listeners = collections.defaultdict(list)
     self._listeners_lock = threading.Lock()
-    self.pin_state = collections.defaultdict(lambda: False)
+    self.pin_state = collections.defaultdict(lambda: 0) #pins all default to output low
+    self.pin_mode = collections.defaultdict(lambda: MODE_OUTPUT) #pins all default to output
     self._i2c_device = I2CDevice(self)
     super(Board, self).__init__()
     if start_serial:
@@ -245,6 +246,33 @@ class Board(threading.Thread):
         continue
       if not token or not self.DispatchToken(token):
         break
+
+  def digitalWrite(self, pin, value):
+    assert value == 0 or value == 1
+    self.pin_state[pin] = value
+    port = pin / 8
+    state = 0
+    for i in range(0, 8):
+      pin_nr = port * 8 + i
+      if self.pin_mode[pin_nr] == MODE_INPUT or self.pin_mode[pin_nr] == MODE_OUTPUT:
+        state |= self.pin_state[pin_nr] << i
+    self.port.writer.q.put([DIGITAL_MESSAGE + port, state & 0x7f, state >> 7])
+
+  def digitalRead(self, pin):
+    assert 0 <= pin <= len(self.pin_config)
+    return self.pin_state[pin]
+
+  def pinMode(self, pin, mode):
+    assert 0 <= pin <= len(self.pin_config)
+    assert 0 <= mode <= MODE_MAX
+    self.pin_mode[pin] = mode
+    self.port.writer.q.put([SET_PIN_MODE, pin, mode])
+
+  def analogWrite(self, pin, value):
+    pass
+
+  def analogRead(self, pin):
+    pass
 
 
 def FirmataInit(port, baud=57600, log_to_file=None):
