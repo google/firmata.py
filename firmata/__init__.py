@@ -114,7 +114,7 @@ class Board(threading.Thread):
     self.start()
     if wait_for_serial:
       wait_for_serial.acquire()
-      wait_for_serial.wait()
+      wait_for_serial.wait(5)
       wait_for_serial.release()
 
   def StopCommunications(self):
