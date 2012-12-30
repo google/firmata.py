@@ -115,7 +115,7 @@ class Board(threading.Thread):
     self.shutdown = False
     self.start()
     if wait_for_serial:
-      wait_for_serial.wait(5)
+      wait_for_serial.wait(60)
       wait_for_serial.release()
 
   def StopCommunications(self):
@@ -184,8 +184,8 @@ class Board(threading.Thread):
       self.pin_state['A%s' % token['pin']] = token['value']
       return True
     if token_type == 'DIGITAL_MESSAGE':
-      for pin in xrange(1, len(token['pins'])+1):
-        self.pin_state['%s:%s' % (token['port'], pin)] = token['pins'][pin-1]
+      for pin in xrange(8):
+        self.pin_state[token['port'] * 8 + pin] = token['pins'][pin]
       return True
     if token_type == 'PROTOCOL_VERSION':
       self.firmware_version = '%s.%s' % (token['major'], token['minor'])
@@ -227,7 +227,7 @@ class Board(threading.Thread):
       self.AddListener('CAPABILITY_RESPONSE', CapabilityResponseListener)
     self.SendSysex(SE_CAPABILITY_QUERY)
     if wait_capabiity_response:
-      wait_capabiity_response.wait(5)
+      wait_capabiity_response.wait(60)
       wait_capabiity_response.release()
 
   def QueryProtocolVersion(self):
@@ -273,6 +273,14 @@ class Board(threading.Thread):
 
   def analogRead(self, pin):
     pass
+
+  def EnableDigitalReporting(self, port):
+    assert 0 <= port <= len(self.pin_config) / 8 + 1
+    self.port.writer.q.put([REPORT_DIGITAL + port, 1])
+
+  def DisableDigitalReporting(self, port):
+    assert 0 <= port <= len(self.pin_config) / 8 + 1
+    self.port.writer.q.put([REPORT_DIGITAL + port, 0])
 
 
 def FirmataInit(port, baud=57600, log_to_file=None):

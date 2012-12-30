@@ -217,7 +217,7 @@ class SerialReader(threading.Thread):
     command, lsb, msb = self.Next(False), self.Next(), self.Next()
     bitmask = (msb << 7) + lsb
     token_dict = dict(token='DIGITAL_MESSAGE', port=(command-0x90), pins=[])
-    for pin_num in xrange(14):
+    for pin_num in xrange(8):
       token_dict['pins'].append((bitmask % 2) == 1)
       bitmask = bitmask >> 1
     self.Emit(token_dict)
