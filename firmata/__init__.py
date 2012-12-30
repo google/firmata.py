@@ -103,6 +103,7 @@ class Board(threading.Thread):
     wait_for_serial = False
     if self.firmware_name == 'Unknown':
       wait_for_serial = threading.Condition()
+      wait_for_serial.acquire()
       def FirmwareReportListener(token):
         wait_for_serial.acquire()
         wait_for_serial.notify_all()
@@ -113,7 +114,6 @@ class Board(threading.Thread):
     self.shutdown = False
     self.start()
     if wait_for_serial:
-      wait_for_serial.acquire()
       wait_for_serial.wait(5)
       wait_for_serial.release()
 
