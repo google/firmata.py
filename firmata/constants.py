@@ -1,11 +1,16 @@
 """Constants used by the Firmata wire protocol."""
 
 
+# Pin mode constants
 MODE_INPUT = 0
 MODE_OUTPUT = 1
 MODE_ANALOG = 2
 MODE_PWM = 3
 MODE_SERVO = 4
+MODE_SHIFT = 5
+MODE_I2C = 6
+MODE_MAX = 6
+
 # I2C command constants
 I2C_READ = 0b00001000,
 I2C_WRITE = 0b00000000
@@ -28,6 +33,7 @@ CONST = dict(
   ANALOG_MESSAGE_D = 0xED,
   ANALOG_MESSAGE_E = 0xEE,
   ANALOG_MESSAGE_F = 0xEF,
+  DIGITAL_MESSAGE = 0x90,
   DIGITAL_MESSAGE_0 = 0x90,
   DIGITAL_MESSAGE_1 = 0x91,
   DIGITAL_MESSAGE_2 = 0x92,
