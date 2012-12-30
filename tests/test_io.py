@@ -30,12 +30,13 @@ MONDO_DATA = [chr(i) for i in (
   0x0, 0x1, 0x1, 0x1, 0x2, 0xa, 0x7f,
   0x0, 0x1, 0x1, 0x1, 0x2, 0xa, 0x6, 0x1, 0x7f,
   0x0, 0x1, 0x1, 0x1, 0x2, 0xa, 0x6, 0x1, 0x7f, SYSEX_END,
-  ANALOG_MESSAGE_0, 0x23, 0x00,  # Pin A00 set to 0x23
+  SYSEX_START, SE_ANALOG_MAPPING_RESPONSE,
+  0xf7, 0xf7, 0xf7, 0xf7, 0xf7, 0xf7, 0xf7, 0xf7, 0xf7, 0xf7, 0xf7, 0xf7, 0xf7,
+  0x0, 0x01, 0x02, 0x03, 0x04, 0x05, SYSEX_END,
+  ANALOG_MESSAGE_0, 0x23, 0x00,  # Pin A0 set to 0x23
   DIGITAL_MESSAGE_0, 0b00000100, 0b00000000,  # Pin 2 set.
-  SYSEX_START, SE_ANALOG_MAPPING_RESPONSE, 0x0, 0x01, 127, SYSEX_END,  # Only two analog pins, A00, A01
-  SYSEX_START, SE_CAPABILITY_RESPONSE, 0x0, 0x1, 127, 0x1, 0x1, 127, SYSEX_END, # Only two pins total
-  SYSEX_START, SE_PIN_STATE_RESPONSE, 0x1f, 0x1, 0x1, 0x2, 0x0, SYSEX_END, # Report 1:15 pin state
-  SYSEX_START, SE_RESERVED_COMMAND, 0x20, SYSEX_END # Hypothetical reserved command
+  SYSEX_START, SE_PIN_STATE_RESPONSE, 0x04, 0x01, 0x00, SYSEX_END,  # Report pin 4 mode and state
+  SYSEX_START, SE_RESERVED_COMMAND, 0x20, SYSEX_END  # Hypothetical reserved command
 )]
 
 class MockSerial(object):
@@ -88,8 +89,8 @@ class LexerTest(unittest.TestCase):
 
   def test_Mondo(self):
     self._port.data = MONDO_DATA[:]
-    board = firmata.FirmataInit('', 10, log_to_file=None)
-    board.join()
+    board = firmata.Board('', 10, log_to_file=None, start_serial=True)
+    board.join(timeout=2)
     board.StopCommunications()
     self.assertEqual(len(board.errors), 1)
     self.assertIn('RESERVED_COMMAND', board.errors[0])

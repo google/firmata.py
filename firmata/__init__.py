@@ -234,7 +234,7 @@ class Board(threading.Thread):
       wait_analog_mapping_response.notify_all()
       wait_analog_mapping_response.release()
       return (True, False)
-    
+
     self.AddListener('CAPABILITY_RESPONSE', CapabilityResponseListener)
     self.AddListener('ANALOG_MAPPING_RESPONSE', AnalogMappingResponseListener)
     self.QueryCapabilities()
