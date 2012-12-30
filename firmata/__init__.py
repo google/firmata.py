@@ -217,6 +217,7 @@ class Board(threading.Thread):
     wait_capabiity_response = False
     if not self.pin_config:
       wait_capabiity_response = threading.Condition()
+      wait_capabiity_response.acquire()
       def CapabilityResponseListener(token):
         wait_capabiity_response.acquire()
         wait_capabiity_response.notify_all()
@@ -225,8 +226,7 @@ class Board(threading.Thread):
       self.AddListener('CAPABILITY_RESPONSE', CapabilityResponseListener)
     self.SendSysex(SE_CAPABILITY_QUERY)
     if wait_capabiity_response:
-      wait_capabiity_response.acquire()
-      wait_capabiity_response.wait()
+      wait_capabiity_response.wait(5)
       wait_capabiity_response.release()
 
   def QueryProtocolVersion(self):
