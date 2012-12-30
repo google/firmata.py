@@ -177,10 +177,13 @@ class Board(threading.Thread):
       return True
     if token_type == 'ANALOG_MAPPING_RESPONSE':
       self.dtoa_map = token['channels']
-      self.atod_map = [14, 15, 16, 17, 18, 19]
-      #for i in xrange(len(self.dtoa_map)):
-      #  if self.dtoa_map[i] is not False:
-      #    self.atod_map[self.dtoa_map[i]] = i
+      self.atod_map = []
+      map_dict = {}
+      for i in xrange(len(self.dtoa_map)):
+        if self.dtoa_map[i] is not False:
+          map_dict[self.dtoa_map[i]] = i
+      for k in sorted(map_dict.keys()):
+        self.atod_map.append(map_dict[k])
       return True
     if token_type == 'CAPABILITY_RESPONSE':
       self.pin_config = token['pins']
