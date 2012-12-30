@@ -88,7 +88,8 @@ class Board(threading.Thread):
     self.firmware_version = 'Unknown'
     self.firmware_name = 'Unknown'
     self.errors = []
-    self.analog_channels = []
+    self.dtoa_map = []
+    self.atod_map = []
     self.pin_config = []
     self._listeners = collections.defaultdict(list)
     self._listeners_lock = threading.Lock()
@@ -175,13 +176,18 @@ class Board(threading.Thread):
       self.firmware_name = token['name']
       return True
     if token_type == 'ANALOG_MAPPING_RESPONSE':
-      self.analog_channels = token['channels']
+      self.dtoa_map = token['channels']
+      self.atod_map = [14, 15, 16, 17, 18, 19]
+      #for i in xrange(len(self.dtoa_map)):
+      #  if self.dtoa_map[i] is not False:
+      #    self.atod_map[self.dtoa_map[i]] = i
       return True
     if token_type == 'CAPABILITY_RESPONSE':
       self.pin_config = token['pins']
       return True
     if token_type == 'ANALOG_MESSAGE':
-      self.pin_state['A%s' % token['pin']] = token['value']
+      pin = self.atod_map[token['pin']]
+      self.pin_state[pin] = token['value']
       return True
     if token_type == 'DIGITAL_MESSAGE':
       for pin in xrange(8):
@@ -192,12 +198,7 @@ class Board(threading.Thread):
       return True
     if token_type == 'PIN_STATE_RESPONSE':
       if token['mode'] == MODE_ANALOG:
-        token['pin'] = 'A%s' % token['pin']
-      else:
-        pin_nr = token['pin']
-        pin = pin_nr % 16
-        port = (pin_nr - pin) / 16
-        token['pin'] = '%s:%s' % (port, pin)
+        token['pin'] = self.atod_map[token['pin']]
       self.pin_state[token['pin']] = token['data']
       return True
     self.errors.append('Unable to dispatch token: %s' % (repr(token)))
@@ -214,27 +215,49 @@ class Board(threading.Thread):
     # TODO: disable local copies of i2c pins
     return self._i2c_device
 
+  def QueryBoardParameters(self):
+    wait_capability_response = threading.Condition()
+    wait_capability_response.acquire()
+    wait_analog_mapping_response = threading.Condition()
+    wait_analog_mapping_response.acquire()
+    
+    def CapabilityResponseListener(token):
+      wait_capability_response.acquire()
+      wait_capability_response.notify_all()
+      wait_capability_response.release()
+      return (True, False)
+    def AnalogMappingResponseListener(token):
+      wait_analog_mapping_response.acquire()
+      wait_analog_mapping_response.notify_all()
+      wait_analog_mapping_response.release()
+      return (True, False)
+    
+    self.AddListener('CAPABILITY_RESPONSE', CapabilityResponseListener)
+    self.AddListener('ANALOG_MAPPING_RESPONSE', AnalogMappingResponseListener)
+    self.QueryCapabilities()
+    self.QueryAnalogMapping()
+
+    wait_capability_response.wait()
+    wait_capability_response.release()
+    wait_analog_mapping_response.wait()
+    wait_analog_mapping_response.release()
+
+  def QueryBoardState(self):
+    if not self.pin_config and self.dtoa_map:
+      self.QueryBoardParameters()
+    # Send SE_PIN_STATE_QUERY for each pin, wait til all return
+
   def QueryCapabilities(self):
-    wait_capabiity_response = False
-    if not self.pin_config:
-      wait_capabiity_response = threading.Condition()
-      wait_capabiity_response.acquire()
-      def CapabilityResponseListener(token):
-        wait_capabiity_response.acquire()
-        wait_capabiity_response.notify_all()
-        wait_capabiity_response.release()
-        return (True, False)
-      self.AddListener('CAPABILITY_RESPONSE', CapabilityResponseListener)
     self.SendSysex(SE_CAPABILITY_QUERY)
-    if wait_capabiity_response:
-      wait_capabiity_response.wait(60)
-      wait_capabiity_response.release()
 
   def QueryProtocolVersion(self):
     self.port.writer.q.put([PROTOCOL_VERSION])
 
-  def QueryFirmwareVersionAndString(self, wait=True):
+  def QueryFirmwareVersionAndString(self):
     self.SendSysex(SE_REPORT_FIRMWARE)
+
+  def QueryAnalogMapping(self):
+    self.SendSysex(SE_ANALOG_MAPPING_QUERY)
 
   def run(self):
     """Reads tokens as they come in, and dispatches them appropriately. If an error occurs, the thread terminates."""
@@ -269,10 +292,19 @@ class Board(threading.Thread):
     self.port.writer.q.put([SET_PIN_MODE, pin, mode])
 
   def analogWrite(self, pin, value):
+    # TODO: write PWM value to digital port
     pass
 
   def analogRead(self, pin):
-    pass
+    return self.pin_state[self.atod_map[pin]]
+
+  def EnableAnalogReporting(self, pin):
+    assert 0 <= pin <= len(self.atod_map)
+    self.port.writer.q.put([REPORT_ANALOG + pin, 1])
+
+  def DisableAnalogReporting(self, pin):
+    assert 0 <= pin <= len(self.atod_map)
+    self.port.writer.q.put([REPORT_ANALOG + pin, 0])
 
   def EnableDigitalReporting(self, port):
     assert 0 <= port <= len(self.pin_config) / 8 + 1
@@ -295,7 +327,7 @@ def FirmataInit(port, baud=57600, log_to_file=None):
     A Board object which implements the firmata protocol over the specified serial port.
   """
   board = Board(port, baud, log_to_file=log_to_file, start_serial=True)
-  board.QueryCapabilities()
+  board.QueryBoardParameters()
   return board
 
 __all__ = ['FirmataInit', 'Board', 'SerialPort'] + CONST_R.values()
