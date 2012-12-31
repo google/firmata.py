@@ -309,7 +309,7 @@ class Board(threading.Thread):
 
   def analogRead(self, pin):
     pin = self.atod_map[pin]
-    assert self.pin_mode[pin] == MODE_ANALOG
+    assert self.pin_config[pin][MODE_ANALOG]
     return self.pin_state[pin]
 
   def EnableAnalogReporting(self, pin):
