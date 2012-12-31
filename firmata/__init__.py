@@ -16,6 +16,7 @@ import time
 
 from firmata.constants import *
 from firmata.io import SerialPort
+from firmata.utils import *
 
 
 class I2CNotEnabled(Exception): pass
@@ -42,10 +43,12 @@ class I2CDevice(object):
       data: A bytearray/list/string. The data to write to the I2C bus.
     """
     assert addr < 0x80
+    
     if reg is not None:
-      self._board.SendSysex(SE_I2C_REQUEST, [addr, I2C_WRITE, reg] + data)
+      assert reg < 0x80
+      self._board.SendSysex(SE_I2C_REQUEST, [addr, I2C_WRITE, reg] + encodeSequence(data))
     else:
-      self._board.SendSysex(SE_I2C_REQUEST, [addr, I2C_WRITE] + data)
+      self._board.SendSysex(SE_I2C_REQUEST, [addr, I2C_WRITE] + encodeSequence(data))
 
   def I2CRead(self, addr, reg, count, timeout=1):
     """Send an I2C write command.
@@ -60,7 +63,9 @@ class I2CDevice(object):
       A list of tokens received from the device before the timeout.
     """
     assert addr < 0x80
+    assert 0 < count < 127
     if reg is not None:
+      assert reg < 0x80
       self._board.SendSysex(SE_I2C_REQUEST, [addr, I2C_READ, reg, count])
     else:
       self._board.SendSysex(SE_I2C_REQUEST, [addr, I2C_READ, count])
@@ -71,7 +76,7 @@ class I2CDevice(object):
         receieved.append(self.replies.get(timeout=timeout))
       except Empty:
         continue
-    return receieved
+    return decodeSequence(received)
 
 class Board(threading.Thread):
   def __init__(self, port, baud, log_to_file=None, start_serial=False):
