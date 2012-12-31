@@ -213,9 +213,12 @@ class Board(threading.Thread):
     else:
       self.port.writer.q.put([SYSEX_START, cmd, SYSEX_END])
 
-  def I2CConfig(self, delay):
+  def I2CConfig(self, delay=0):
+    # Set all I2C capable pins to I2C mode, there is no way to specify which to use.
+    for i in xrange(len(self.pin_config)):
+      if self.pin_config[i].has_key(MODE_I2C):
+        self.pin_mode[i] = MODE_I2C
     self.SendSysex(SE_I2C_CONFIG, [delay])
-    # TODO: disable local copies of i2c pins
     return self._i2c_device
 
   def QueryBoardParameters(self):
