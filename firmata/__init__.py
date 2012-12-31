@@ -43,9 +43,9 @@ class I2CDevice(object):
     """
     assert addr < 0x80
     if reg is not None:
-      self._board.SendSysex(I2C_REQUEST, [addr, I2C_WRITE, reg] + data)
+      self._board.SendSysex(SE_I2C_REQUEST, [addr, I2C_WRITE, reg] + data)
     else:
-      self._board.SendSysex(I2C_REQUEST, [addr, I2C_WRITE] + data)
+      self._board.SendSysex(SE_I2C_REQUEST, [addr, I2C_WRITE] + data)
 
   def I2CRead(self, addr, reg, count, timeout=1):
     """Send an I2C write command.
