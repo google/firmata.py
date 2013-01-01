@@ -76,7 +76,7 @@ class I2CDevice(object):
         receieved.append(self.replies.get(timeout=timeout))
       except Empty:
         continue
-    return decodeSequence(received)
+    return decodeSequence(receieved)
 
 class Board(threading.Thread):
   def __init__(self, port, baud, log_to_file=None, start_serial=False):
