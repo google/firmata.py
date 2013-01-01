@@ -62,6 +62,8 @@ class I2CDevice(object):
     Returns:
       A list of tokens received from the device before the timeout.
     """
+    #BUG: what I'm seeing when trying to read from I2C:
+    #[START_SYSEX, SE_I2C_REQUEST, 0x4F, (8,), 1, 2, END_SYSEX]
     assert addr < 0x80
     assert 0 < count < 127
     if reg is not None:

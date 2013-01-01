@@ -155,10 +155,10 @@ class FirmataTest(unittest.TestCase):
   def test_QueryBoardState(self):
     self._port.data = FIRMATA_INIT[:] + ARDUINO_CAPABILITY[:] + ARDUINO_ANALOG_MAPPING[:]
     self.board = firmata.Board('', 10, log_to_file=None, start_serial=True)
-    self.board.QueryBoardState(wait=False)
+    for i in xrange(20):
+      self.board.QueryPinState(i)
     self.board.join(timeout=1)
     self.board.StopCommunications()
-    print self._port.output
     assert self._port.output == [
        # 0xF0 (START_SYSEX), 0X6D (PIN_STATE_QUERY), pin, 0XF7 (END_SYSEX)
       '\xf0\x6d\x00\xf7', '\xf0\x6d\x01\xf7', '\xf0\x6d\x02\xf7', '\xf0\x6d\x03\xf7',
@@ -172,8 +172,6 @@ class FirmataTest(unittest.TestCase):
     board = firmata.Board('', 10, log_to_file='/tmp/testlog', start_serial=True)
     board.join(timeout=2)
     board.StopCommunications()
-    print board.pin_mode
-    print board.pin_state
     assert board.pin_mode[2] == 1
     assert board.pin_mode[3] == 1
     assert board.pin_mode[4] == 1
@@ -202,7 +200,6 @@ class FirmataTest(unittest.TestCase):
     board.digitalWrite(8, 0)
     board.join(timeout=1)
     board.StopCommunications()
-    print self._port.output
     assert self._port.output == ['\x91\x00\x00']
 
   def test_digitalWriteDoesntLeakBits(self):
@@ -224,5 +221,14 @@ class FirmataTest(unittest.TestCase):
     board.digitalWrite(8, 0)
     board.join(timeout=1)
     board.StopCommunications()
-    print self._port.output
     assert self._port.output == ['\x91\x00\x00']
+
+  def test_I2CRead(self):
+    self._port.data = FIRMATA_INIT[:] + ARDUINO_CAPABILITY[:] + ARDUINO_ANALOG_MAPPING[:] + ARDUINO_BOARD_STATE[:]
+    board = firmata.Board('', 10, log_to_file=None, start_serial=True)
+    """Test basic functionality of digitalWrite()."""
+    board.I2CConfig(0)
+    board._i2c_device.I2CRead(0x4f, 0x00, 2)
+    board.join(timeout=1)
+    board.StopCommunications()
+    assert self._port.output == ['\xf0\x78\x00\xf7', '\xf0\x76\x4f\x08\x00\x02\xf7']

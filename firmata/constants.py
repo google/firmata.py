@@ -12,8 +12,8 @@ MODE_I2C = 6
 MODE_MAX = 6
 
 # I2C command constants
-I2C_READ = 0b00001000,
-I2C_WRITE = 0b00000000
+I2C_READ = 0x08
+I2C_WRITE = 0x00
 
 
 CONST = dict(
