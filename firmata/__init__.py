@@ -205,8 +205,6 @@ class Board(threading.Thread):
       self.firmware_version = '%s.%s' % (token['major'], token['minor'])
       return True
     if token_type == 'PIN_STATE_RESPONSE':
-      if token['mode'] == MODE_ANALOG:
-        token['pin'] = self.atod_map[token['pin']]
       self.pin_state[token['pin']] = token['data']
       return True
     self.errors.append('Unable to dispatch token: %s' % (repr(token)))
