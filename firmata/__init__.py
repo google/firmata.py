@@ -206,6 +206,7 @@ class Board(threading.Thread):
       return True
     if token_type == 'PIN_STATE_RESPONSE':
       self.pin_state[token['pin']] = token['data']
+      self.pin_mode[token['pin']] = token['mode']
       return True
     self.errors.append('Unable to dispatch token: %s' % (repr(token)))
     return False
@@ -313,7 +314,7 @@ class Board(threading.Thread):
       pin_nr = port * 8 + i
       # TODO: can we send a digitalWrite to an analog pin to enable the pullup?
       if self.pin_mode[pin_nr] == MODE_INPUT or self.pin_mode[pin_nr] == MODE_OUTPUT:
-        state |= self.pin_state[pin_nr] << i
+        state |= (self.pin_state[pin_nr] & 0x01) << i
     self.port.writer.q.put([DIGITAL_MESSAGE + port, state & 0x7f, state >> 7])
 
   def digitalRead(self, pin):
