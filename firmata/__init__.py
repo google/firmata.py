@@ -284,7 +284,7 @@ class Board(threading.Thread):
     self.pin_state[pin] = value
     port = pin / 8
     state = 0
-    for i in range(0, 8):
+    for i in range(8):
       pin_nr = port * 8 + i
       # TODO: can we send a digitalWrite to an analog pin to enable the pullup?
       if self.pin_mode[pin_nr] == MODE_INPUT or self.pin_mode[pin_nr] == MODE_OUTPUT:
@@ -292,19 +292,19 @@ class Board(threading.Thread):
     self.port.writer.q.put([DIGITAL_MESSAGE + port, state & 0x7f, state >> 7])
 
   def digitalRead(self, pin):
-    assert 0 <= pin <= len(self.pin_config)
+    assert 0 <= pin < len(self.pin_config)
     assert self.pin_mode[pin] == MODE_INPUT
     return self.pin_state[pin]
 
   def pinMode(self, pin, mode):
     assert 0 <= mode <= MODE_MAX
-    assert 0 <= pin <= len(self.pin_config)
+    assert 0 <= pin < len(self.pin_config)
     assert self.pin_config[pin].has_key(mode)
     self.pin_mode[pin] = mode
     self.port.writer.q.put([SET_PIN_MODE, pin, mode])
 
   def analogWrite(self, pin, value):
-    assert 0 <= pin <= len(self.pin_config)
+    assert 0 <= pin < len(self.pin_config)
     assert 0 <= value <= 255
     if self.pin_mode[pin] != MODE_PWM:
       self.pinMode(pin, MODE_PWM)
