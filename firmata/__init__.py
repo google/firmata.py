@@ -168,7 +168,7 @@ class Board(threading.Thread):
       if abort:
         abort_regular_execution = True
       if not delete:
-        self._listeners.append(l)
+        self._listeners[token_type].append(l)
     self._listeners_lock.release()
     if abort_regular_execution:
       return True

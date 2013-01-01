@@ -232,3 +232,25 @@ class FirmataTest(unittest.TestCase):
     board.join(timeout=1)
     board.StopCommunications()
     assert self._port.output == ['\xf0\x78\x00\xf7', '\xf0\x76\x4f\x08\x00\x02\xf7']
+
+  def test_ListenerReuse(self):
+    """Test that DispatchToken() will properly recycle listeners that request it"""
+    board = firmata.Board('', 10, log_to_file=None, start_serial=False)
+    def FakeListener(token):
+      return (False, True) # don't delete, do abort processing
+    FAKE_TOKEN = 'RESPONSE'
+    board.AddListener(FAKE_TOKEN, FakeListener)
+    token = {'token': FAKE_TOKEN}
+    board.DispatchToken(token)
+    assert board._listeners[FAKE_TOKEN] == [FakeListener]
+
+  def test_OneTimeListener(self):
+    """Test that DispatchToken() will properly delete listeners that request it"""
+    board = firmata.Board('', 10, log_to_file=None, start_serial=False)
+    def FakeListener(token):
+      return (True, True) # do delete, do abort processing
+    FAKE_TOKEN = 'RESPONSE'
+    board.AddListener(FAKE_TOKEN, FakeListener)
+    token = {'token': FAKE_TOKEN}
+    board.DispatchToken(token)
+    assert board._listeners[FAKE_TOKEN] == []
