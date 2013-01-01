@@ -225,58 +225,34 @@ class Board(threading.Thread):
     self.SendSysex(SE_I2C_CONFIG, [delay])
     return self._i2c_device
 
-  def QueryBoardParameters(self):
-    wait_capability_response = threading.Condition()
-    wait_capability_response.acquire()
-    wait_analog_mapping_response = threading.Condition()
-    wait_analog_mapping_response.acquire()
-    
-    def CapabilityResponseListener(token):
-      wait_capability_response.acquire()
-      wait_capability_response.notify_all()
-      wait_capability_response.release()
-      return (True, False)
-    def AnalogMappingResponseListener(token):
-      wait_analog_mapping_response.acquire()
-      wait_analog_mapping_response.notify_all()
-      wait_analog_mapping_response.release()
-      return (True, False)
-
-    self.AddListener('CAPABILITY_RESPONSE', CapabilityResponseListener)
-    self.AddListener('ANALOG_MAPPING_RESPONSE', AnalogMappingResponseListener)
-    self.QueryCapabilities()
-    self.QueryAnalogMapping()
-
-    wait_capability_response.wait()
-    wait_capability_response.release()
-    wait_analog_mapping_response.wait()
-    wait_analog_mapping_response.release()
-
-  def QueryBoardState(self, wait=True):
-    """ Query the state of all pins and update board accordingly."""
-    if not self.pin_config and self.dtoa_map:
-      self.QueryBoardParameters()
+  def QueryBoardCapabilitiesAndState(self, wait=True):
+    """ Query the board capabilities and state."""
     if not wait:
+      self.QueryCapabilities()
+      self.QueryAnalogMapping()
       for i in xrange(len(self.pin_config)):
         self.QueryPinState(i)
     else:
-      pin_count_lock = threading.Condition()
-      pin_count_lock.acquire()
-      pin_count = len(self.pin_config)
+      query_lock = threading.Condition()
+      query_lock.acquire()
 
-      def PinStateResponseListener(token):
-        pin_count_lock.acquire()
-        pin_count -= 1
-        pin_count_lock.notify_all()
-        pin_count_lock.release()
+      def QueryResponseListener(token):
+        query_lock.acquire()
+        query_lock.notify_all()
+        query_lock.release()
         return (True, False)
 
+      self.AddListener('CAPABILITY_RESPONSE', QueryResponseListener)
+      self.QueryCapabilities()
+      query_lock.wait()
+      self.AddListener('ANALOG_MAPPING_RESPONSE', QueryResponseListener)
+      self.QueryAnalogMapping()
+      query_lock.wait()
       for i in xrange(len(self.pin_config)):
-        self.AddListener('PIN_STATE_RESPONSE', PinStateResponseListener)
+        self.AddListener('PIN_STATE_RESPONSE', QueryResponseListener)
         self.QueryPinState(i)
-        pin_count_lock.wait()
-        pin_count_lock.release()
-      assert pin_count_lock != 0
+        query_lock.wait()
+      query_lock.release()
 
   def QueryPinState(self, pin):
     assert 0 <= pin < len(self.pin_config)
@@ -370,7 +346,7 @@ def FirmataInit(port, baud=57600, log_to_file=None):
     A Board object which implements the firmata protocol over the specified serial port.
   """
   board = Board(port, baud, log_to_file=log_to_file, start_serial=True)
-  board.QueryBoardState()
+  board.QueryBoardCapabilitiesAndState()
   return board
 
 __all__ = ['FirmataInit', 'Board', 'SerialPort'] + CONST_R.values()
