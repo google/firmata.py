@@ -23,7 +23,41 @@ class I2CNotEnabled(Exception): pass
 
 
 class I2CDevice(object):
-  """Encapsulates I2C functionality."""
+  """Encapsulates I2C functionality.
+
+  A typical I2C conversation
+  Config:
+  >> 0xf0 (SYSEX_START)
+  >> 0x78 (SE_I2C_CONFIG)
+  >> 0x00 (delay lsb)
+  >> 0x00 (delay msb)
+  >> 0xf7 (SYSEX_END)
+
+  Request:
+  >> 0xf0 (SYSEX_START)
+  >> 0x76 (SE_I2C_REQUEST)
+  >> 0x4f (addr lsb)
+  >> 0x00 (addr msb | mode)
+  >> 0x00 (reg lsb)
+  >> 0x00 (reg msb)
+  >> 0x02 (count lsb)
+  >> 0x00 (count msb)
+  >> 0xf7 (SYSEX_END)
+
+  Reply:
+  << 0xf0 (SYSEX_START)
+  << 0x77 (SE_I2C_REPLY)
+  << 0x4f (addr lsb)
+  << 0x00 (addr_msb)
+  << 0x00 (reg lsb)
+  << 0x00 (reg msb)
+  << 0x39 (byte0 lsb)
+  << 0x00 (byte0 msb)
+  << 0x39 (byte1 lsb)
+  << 0x00 (byte1 msb)
+  ...
+  << 0xf7 (SYSEX_END)
+  """
   def __init__(self, board):
     """Construct an I2CDevice and add a listener."""
     self.replies = Queue()
@@ -43,15 +77,14 @@ class I2CDevice(object):
       data: A bytearray/list/string. The data to write to the I2C bus.
     """
     assert addr < 0x80
-    
+    message = [addr, I2C_WRITE]
     if reg is not None:
-      assert reg < 0x80
-      self._board.SendSysex(SE_I2C_REQUEST, [addr, I2C_WRITE, reg] + encodeSequence(data))
-    else:
-      self._board.SendSysex(SE_I2C_REQUEST, [addr, I2C_WRITE] + encodeSequence(data))
+      message += encodeSequence([reg])
+    message += encodeSequence(data)
+    self._board.SendSysex(SE_I2C_REQUEST, message)
 
   def I2CRead(self, addr, reg, count, timeout=1):
-    """Send an I2C write command.
+    """Send an I2C read command.
 
     Args:
       addr: A byte. An I2C address. Must be less than 0x80.
@@ -62,23 +95,24 @@ class I2CDevice(object):
     Returns:
       A list of tokens received from the device before the timeout.
     """
-    #BUG: what I'm seeing when trying to read from I2C:
-    #[START_SYSEX, SE_I2C_REQUEST, 0x4F, (8,), 1, 2, END_SYSEX]
     assert addr < 0x80
-    assert 0 < count < 127
+    message = [addr, I2C_READ]
     if reg is not None:
-      assert reg < 0x80
-      self._board.SendSysex(SE_I2C_REQUEST, [addr, I2C_READ, reg, count])
-    else:
-      self._board.SendSysex(SE_I2C_REQUEST, [addr, I2C_READ, count])
+      message += encodeSequence([reg])
+    message += encodeSequence([count])
+    self._board.SendSysex(SE_I2C_REQUEST, message)
     receieved = []
     start_t = time.time()
     while time.time() - timeout < start_t:
       try:
-        receieved.append(self.replies.get(timeout=timeout))
+        token = self.replies.get(timeout=timeout)
       except Empty:
         continue
-    return decodeSequence(receieved)
+    if token:
+      assert token['addr'] == addr
+      assert token['reg'] == reg
+      return token['data']
+
 
 class Board(threading.Thread):
   def __init__(self, port, baud, log_to_file=None, start_serial=False):
@@ -224,7 +258,7 @@ class Board(threading.Thread):
     for i in xrange(len(self.pin_config)):
       if self.pin_config[i].has_key(MODE_I2C):
         self.pin_mode[i] = MODE_I2C
-    self.SendSysex(SE_I2C_CONFIG, [delay])
+    self.SendSysex(SE_I2C_CONFIG, encodeSequence([delay]))
     return self._i2c_device
 
   def QueryBoardCapabilitiesAndState(self, wait=True):

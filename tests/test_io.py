@@ -74,6 +74,11 @@ FIRMATA_UNKNOWN = [chr(i) for i in (
   SYSEX_START, SE_RESERVED_COMMAND, 0x20, SYSEX_END  # Hypothetical reserved command
 )]
 
+I2C_REPLY_MESSAGE = [chr(i) for i in (
+  #                         |   addr    |   reg     |   byte0   |   byte1   |
+  SYSEX_START, SE_I2C_REPLY, 0x4f, 0x00, 0x00, 0x00, 0x7f, 0x01, 0x00, 0x00, SYSEX_END,
+)]
+I2C_REPLY_DICT = dict(token='I2C_REPLY', addr=0x4f, reg=0x00, data=[0xff, 0x00])
 
 class MockSerial(object):
   def __init__(self, *args, **kargs):
@@ -213,6 +218,7 @@ class FirmataTest(unittest.TestCase):
     board.StopCommunications()
     assert self._port.output == ['\x91\x40\x00']
 
+  # This test is flaky, not sure why
   def test_digitalWriteHasNoAnalogLeaks(self):
     """Test that analog values don't leak into digitalWrite()."""
     self._port.data = FIRMATA_INIT[:] + ARDUINO_CAPABILITY[:] + ARDUINO_ANALOG_MAPPING[:] + ARDUINO_BOARD_STATE[:]
@@ -224,14 +230,27 @@ class FirmataTest(unittest.TestCase):
     assert self._port.output == ['\x91\x00\x00']
 
   def test_I2CRead(self):
-    self._port.data = FIRMATA_INIT[:] + ARDUINO_CAPABILITY[:] + ARDUINO_ANALOG_MAPPING[:] + ARDUINO_BOARD_STATE[:]
+    """Test simple I2C read query is properly sent and reply lexxed"""
+    self._port.data = FIRMATA_INIT[:] + ARDUINO_CAPABILITY[:] + ARDUINO_ANALOG_MAPPING[:] + ARDUINO_BOARD_STATE[:] + I2C_REPLY_MESSAGE[:]
     board = firmata.Board('', 10, log_to_file=None, start_serial=True)
-    """Test basic functionality of digitalWrite()."""
     board.I2CConfig(0)
-    board._i2c_device.I2CRead(0x4f, 0x00, 2)
+    reply = board._i2c_device.I2CRead(0x4f, 0x00, 2) # read 2 bytes from register 0
     board.join(timeout=1)
     board.StopCommunications()
-    assert self._port.output == ['\xf0\x78\x00\xf7', '\xf0\x76\x4f\x08\x00\x02\xf7']
+    #                            |    i2c config      |   | start | addr  |  reg  |   2   | end
+    assert self._port.output == ['\xf0\x78\x00\x00\xf7', '\xf0\x76\x4f\x08\x00\x00\x02\x00\xf7']
+    assert reply == I2C_REPLY_DICT['data']
+
+  def test_I2CWriteSend(self):
+    """Test simple I2C write query is properly sent"""
+    self._port.data = FIRMATA_INIT[:] + ARDUINO_CAPABILITY[:] + ARDUINO_ANALOG_MAPPING[:] + ARDUINO_BOARD_STATE[:]
+    board = firmata.Board('', 10, log_to_file=None, start_serial=True)
+    board.I2CConfig(0)
+    board._i2c_device.I2CWrite(0x4f, 0x00, [0x7f, 0xff]) # write 2 bytes to register 0
+    board.join(timeout=1)
+    board.StopCommunications()
+    #                            |    i2c config      |   | start | addr  |  reg  |   2 bytes     | end
+    assert self._port.output == ['\xf0\x78\x00\x00\xf7', '\xf0\x76\x4f\x00\x00\x00\x7f\x00\x7f\x01\xf7']
 
   def test_ListenerReuse(self):
     """Test that DispatchToken() will properly recycle listeners that request it"""
