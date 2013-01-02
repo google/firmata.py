@@ -103,15 +103,13 @@ class I2CDevice(object):
     self._board.SendSysex(SE_I2C_REQUEST, message)
     receieved = []
     start_t = time.time()
-    while time.time() - timeout < start_t:
-      try:
-        token = self.replies.get(timeout=timeout)
-      except Empty:
-        continue
-    if token:
+    try:
+      token = self.replies.get(timeout=timeout)
       assert token['addr'] == addr
       assert token['reg'] == reg
       return token['data']
+    except Empty:
+      return None
 
 
 class Board(threading.Thread):
