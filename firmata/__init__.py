@@ -153,11 +153,14 @@ class Board(threading.Thread):
         wait_for_serial.release()
         return (True, False)
       self.AddListener('REPORT_FIRMWARE', FirmwareReportListener)
+    # Not all boards reset on port open, send the request just in case
+    self.QueryProtocolVersion()
+    self.QueryFirmwareVersionAndString()
     self.port.StartCommunications()
     self.shutdown = False
     self.start()
     if wait_for_serial:
-      wait_for_serial.wait(60)
+      wait_for_serial.wait(10)
       wait_for_serial.release()
 
   def StopCommunications(self):
