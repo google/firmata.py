@@ -205,7 +205,7 @@ class SerialReader(threading.Thread):
       return self.lexI2cReply
     if command == SE_REPORT_FIRMWARE:
       return self.lexReportFirmware
-    return self.Error('State Sysex could not determine where to go from here given rune %s (%s)' % (hex(rune),
+    return self.Error('State Sysex could not determine where to go from here given rune %s (%s)' % (hex(command),
         CONST_R.get(rune, 'UNKNOWN')))
 
   def lexAnalogMessage(self):
