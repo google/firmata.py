@@ -371,6 +371,14 @@ class Board(threading.Thread):
     assert 0 <= port <= len(self.pin_config) / 8 + 1
     self.port.writer.q.put([REPORT_DIGITAL + port, 0])
 
+  def SetSamplingInterval(self, interval=19):
+    """Set the sampling interval in ms.
+    
+    Args:
+      interval: sampling interval in ms.  Default is 19.
+    """
+    self.SendSysex(SE_SAMPLING_INTERVAL, encodeSequence([interval]))
+
 
 def FirmataInit(port, baud=57600, log_to_file=None):
   """Instantiate a `Board` object for a given serial port.

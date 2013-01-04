@@ -273,3 +273,14 @@ class FirmataTest(unittest.TestCase):
     token = {'token': FAKE_TOKEN}
     board.DispatchToken(token)
     assert board._listeners[FAKE_TOKEN] == []
+
+  def test_SetSamplingInterval(self):
+    self._port.data = FIRMATA_INIT[:] + ARDUINO_CAPABILITY[:] + ARDUINO_ANALOG_MAPPING[:]
+    board = firmata.Board('', 10, log_to_file=None, start_serial=True)
+    """Test basic functionality of digitalWrite()."""
+    board.SetSamplingInterval(1000)
+    board.SetSamplingInterval()
+    board.join(timeout=1)
+    board.StopCommunications()
+    assert self._port.output == ['\xf0\x7a\x68\x07\xf7', '\xf0\x7a\x13\x00\xf7']
+
