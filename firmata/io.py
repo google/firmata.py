@@ -205,6 +205,8 @@ class SerialReader(threading.Thread):
       return self.lexI2cReply
     if command == SE_REPORT_FIRMWARE:
       return self.lexReportFirmware
+    if command == SE_STRING_DATA:
+      return self.lexStringData
     return self.Error('State Sysex could not determine where to go from here given rune %s (%s)' % (hex(command),
         CONST_R.get(command, 'UNKNOWN')))
 
@@ -241,6 +243,15 @@ class SerialReader(threading.Thread):
       return self.lexSysex
     return self.Error('State Initial could not determine where to go from here given rune %s (%s)' % (hex(rune),
         CONST_R.get(rune, 'UNKNOWN')))
+
+  def lexStringData(self):
+    message = ""
+    rune = self.Next(False)
+    while rune != SYSEX_END:
+      message += chr(rune)
+      rune = self.Next(False)
+    self.Emit(dict(token='STRING_MESSAGE', message=message))
+    return self.lexInitial
 
   def run(self):
     self._port.flushInput()

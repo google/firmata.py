@@ -74,6 +74,10 @@ FIRMATA_UNKNOWN = [chr(i) for i in (
   SYSEX_START, SE_RESERVED_COMMAND, 0x20, SYSEX_END  # Hypothetical reserved command
 )]
 
+FIRMATA_STRING_DATA = [chr(i) for i in (
+  SYSEX_START, SE_STRING_DATA, 0x48, 0x65, 0x6C, 0x6C, 0x6F, SYSEX_END,
+)]
+
 I2C_REPLY_MESSAGE = [chr(i) for i in (
   #                         |   addr    |   reg     |   byte0   |   byte1   |
   SYSEX_START, SE_I2C_REPLY, 0x4f, 0x00, 0x00, 0x00, 0x7f, 0x01, 0x00, 0x00, SYSEX_END,
@@ -199,9 +203,9 @@ class FirmataTest(unittest.TestCase):
       assert board.pin_state[i] == 0
 
   def test_basicDigitalWrite(self):
+    """Test basic functionality of digitalWrite()."""
     self._port.data = FIRMATA_INIT[:] + ARDUINO_CAPABILITY[:] + ARDUINO_ANALOG_MAPPING[:]
     board = firmata.Board('', 10, log_to_file=None, start_serial=True)
-    """Test basic functionality of digitalWrite()."""
     board.digitalWrite(8, 0)
     board.join(timeout=1)
     board.StopCommunications()
@@ -219,6 +223,8 @@ class FirmataTest(unittest.TestCase):
     assert self._port.output == ['\x91\x40\x00']
 
   # This test is flaky, not sure why
+  # output seen:
+  #   ['\x91@\x00']
   def test_digitalWriteHasNoAnalogLeaks(self):
     """Test that analog values don't leak into digitalWrite()."""
     self._port.data = FIRMATA_INIT[:] + ARDUINO_CAPABILITY[:] + ARDUINO_ANALOG_MAPPING[:] + ARDUINO_BOARD_STATE[:]
@@ -227,6 +233,7 @@ class FirmataTest(unittest.TestCase):
     board.digitalWrite(8, 0)
     board.join(timeout=1)
     board.StopCommunications()
+    print self._port.output
     assert self._port.output == ['\x91\x00\x00']
 
   def test_I2CRead(self):
@@ -277,10 +284,15 @@ class FirmataTest(unittest.TestCase):
   def test_SetSamplingInterval(self):
     self._port.data = FIRMATA_INIT[:] + ARDUINO_CAPABILITY[:] + ARDUINO_ANALOG_MAPPING[:]
     board = firmata.Board('', 10, log_to_file=None, start_serial=True)
-    """Test basic functionality of digitalWrite()."""
     board.SetSamplingInterval(1000)
     board.SetSamplingInterval()
     board.join(timeout=1)
     board.StopCommunications()
     assert self._port.output == ['\xf0\x7a\x68\x07\xf7', '\xf0\x7a\x13\x00\xf7']
 
+  def test_StringData(self):
+    self._port.data = FIRMATA_INIT[:] + ARDUINO_CAPABILITY[:] + ARDUINO_ANALOG_MAPPING[:] + FIRMATA_STRING_DATA[:]
+    board = firmata.Board('', 10, log_to_file=None, start_serial=True)
+    board.join(timeout=1)
+    board.StopCommunications()
+    assert board.errors == ['Hello']

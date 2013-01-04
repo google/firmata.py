@@ -211,6 +211,9 @@ class Board(threading.Thread):
     if token_type == 'ERROR':
       self.errors.append(token['message'])
       return True
+    if token_type == 'STRING_MESSAGE':
+      self.errors.append(token['message'])
+      return True
     if token_type == 'RESERVED_COMMAND':
       self.errors.append('Unable to parse a reserved command: %s' % (repr(token)))
       return False
