@@ -139,7 +139,7 @@ class Board(threading.Thread):
     if start_serial:
       self.StartCommunications()
 
-  def StartCommunications(self):
+  def StartCommunications(self, query_version=False):
     """Starts all the threads needed to communicate with the physical board."""
     wait_for_serial = False
     if self.firmware_name == 'Unknown':
@@ -152,8 +152,9 @@ class Board(threading.Thread):
         return (True, False)
       self.AddListener('REPORT_FIRMWARE', FirmwareReportListener)
     # Not all boards reset on port open, send the request just in case
-    self.QueryProtocolVersion()
-    self.QueryFirmwareVersionAndString()
+    if query_version:
+      self.QueryProtocolVersion()
+      self.QueryFirmwareVersionAndString()
     self.port.StartCommunications()
     self.shutdown = False
     self.start()
