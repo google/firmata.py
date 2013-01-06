@@ -230,6 +230,16 @@ class SerialReader(threading.Thread):
     self.Emit(dict(token='PROTOCOL_VERSION', major=major, minor=minor))
     return self.lexInitial
 
+  def lexStringData(self):
+    message = ""
+    char_lsb = self.Next()
+    while char_lsb != SYSEX_END:
+      char_msb = self.Next()
+      message += chr(char_lsb + (char_msb << 7))
+      char_lsb = self.Next()
+    self.Emit(dict(token='STRING_MESSAGE', message=message))
+    return self.lexInitial
+
   def lexInitial(self):
     rune = self.Peek(False)
     if ANALOG_MESSAGE_0 <= rune <= ANALOG_MESSAGE_F:
@@ -243,15 +253,6 @@ class SerialReader(threading.Thread):
       return self.lexSysex
     return self.Error('State Initial could not determine where to go from here given rune %s (%s)' % (hex(rune),
         CONST_R.get(rune, 'UNKNOWN')))
-
-  def lexStringData(self):
-    message = ""
-    rune = self.Next(False)
-    while rune != SYSEX_END:
-      message += chr(rune)
-      rune = self.Next(False)
-    self.Emit(dict(token='STRING_MESSAGE', message=message))
-    return self.lexInitial
 
   def run(self):
     self._port.flushInput()

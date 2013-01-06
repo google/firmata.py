@@ -75,7 +75,7 @@ FIRMATA_UNKNOWN = [chr(i) for i in (
 )]
 
 FIRMATA_STRING_DATA = [chr(i) for i in (
-  SYSEX_START, SE_STRING_DATA, 0x48, 0x65, 0x6C, 0x6C, 0x6F, SYSEX_END,
+  SYSEX_START, SE_STRING_DATA, 0x48, 0x00, 0x65, 0x00, 0x6C, 0x00, 0x6C, 0x00, 0x6F, 0x00, SYSEX_END,
 )]
 
 I2C_REPLY_MESSAGE = [chr(i) for i in (
