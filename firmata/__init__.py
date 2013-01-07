@@ -16,13 +16,48 @@ import time
 
 from firmata.constants import *
 from firmata.io import SerialPort
+from firmata.utils import *
 
 
 class I2CNotEnabled(Exception): pass
 
 
 class I2CDevice(object):
-  """Encapsulates I2C functionality."""
+  """Encapsulates I2C functionality.
+
+  A typical I2C conversation
+  Config:
+  >> 0xf0 (SYSEX_START)
+  >> 0x78 (SE_I2C_CONFIG)
+  >> 0x00 (delay lsb)
+  >> 0x00 (delay msb)
+  >> 0xf7 (SYSEX_END)
+
+  Request:
+  >> 0xf0 (SYSEX_START)
+  >> 0x76 (SE_I2C_REQUEST)
+  >> 0x4f (addr lsb)
+  >> 0x00 (addr msb | mode)
+  >> 0x00 (reg lsb)
+  >> 0x00 (reg msb)
+  >> 0x02 (count lsb)
+  >> 0x00 (count msb)
+  >> 0xf7 (SYSEX_END)
+
+  Reply:
+  << 0xf0 (SYSEX_START)
+  << 0x77 (SE_I2C_REPLY)
+  << 0x4f (addr lsb)
+  << 0x00 (addr_msb)
+  << 0x00 (reg lsb)
+  << 0x00 (reg msb)
+  << 0x39 (byte0 lsb)
+  << 0x00 (byte0 msb)
+  << 0x39 (byte1 lsb)
+  << 0x00 (byte1 msb)
+  ...
+  << 0xf7 (SYSEX_END)
+  """
   def __init__(self, board):
     """Construct an I2CDevice and add a listener."""
     self.replies = Queue()
@@ -42,13 +77,14 @@ class I2CDevice(object):
       data: A bytearray/list/string. The data to write to the I2C bus.
     """
     assert addr < 0x80
+    message = [addr, I2C_WRITE]
     if reg is not None:
-      self._board.SendSysex(I2C_REQUEST, [addr, I2C_WRITE, reg] + data)
-    else:
-      self._board.SendSysex(I2C_REQUEST, [addr, I2C_WRITE] + data)
+      message += encodeSequence([reg])
+    message += encodeSequence(data)
+    self._board.SendSysex(SE_I2C_REQUEST, message)
 
   def I2CRead(self, addr, reg, count, timeout=1):
-    """Send an I2C write command.
+    """Send an I2C read command.
 
     Args:
       addr: A byte. An I2C address. Must be less than 0x80.
@@ -60,18 +96,21 @@ class I2CDevice(object):
       A list of tokens received from the device before the timeout.
     """
     assert addr < 0x80
+    message = [addr, I2C_READ]
     if reg is not None:
-      self._board.SendSysex(SE_I2C_REQUEST, [addr, I2C_READ, reg, count])
-    else:
-      self._board.SendSysex(SE_I2C_REQUEST, [addr, I2C_READ, count])
+      message += encodeSequence([reg])
+    message += encodeSequence([count])
+    self._board.SendSysex(SE_I2C_REQUEST, message)
     receieved = []
     start_t = time.time()
-    while time.time() - timeout < start_t:
-      try:
-        receieved.append(self.replies.get(timeout=timeout))
-      except Empty:
-        continue
-    return receieved
+    try:
+      token = self.replies.get(timeout=timeout)
+      assert token['addr'] == addr
+      assert token['reg'] == reg
+      return token['data']
+    except Empty:
+      return None
+
 
 class Board(threading.Thread):
   def __init__(self, port, baud, log_to_file=None, start_serial=False):
@@ -88,17 +127,19 @@ class Board(threading.Thread):
     self.firmware_version = 'Unknown'
     self.firmware_name = 'Unknown'
     self.errors = []
-    self.analog_channels = []
+    self.dtoa_map = []
+    self.atod_map = []
     self.pin_config = []
     self._listeners = collections.defaultdict(list)
     self._listeners_lock = threading.Lock()
-    self.pin_state = collections.defaultdict(lambda: False)
+    self.pin_state = collections.defaultdict(lambda: 0) #pins all default to output low
+    self.pin_mode = collections.defaultdict(lambda: MODE_OUTPUT) #pins all default to output
     self._i2c_device = I2CDevice(self)
     super(Board, self).__init__()
     if start_serial:
       self.StartCommunications()
 
-  def StartCommunications(self):
+  def StartCommunications(self, query_version=False):
     """Starts all the threads needed to communicate with the physical board."""
     wait_for_serial = False
     if self.firmware_name == 'Unknown':
@@ -110,11 +151,15 @@ class Board(threading.Thread):
         wait_for_serial.release()
         return (True, False)
       self.AddListener('REPORT_FIRMWARE', FirmwareReportListener)
+    # Not all boards reset on port open, send the request just in case
+    if query_version:
+      self.QueryProtocolVersion()
+      self.QueryFirmwareVersionAndString()
     self.port.StartCommunications()
     self.shutdown = False
     self.start()
     if wait_for_serial:
-      wait_for_serial.wait(5)
+      wait_for_serial.wait(10)
       wait_for_serial.release()
 
   def StopCommunications(self):
@@ -159,11 +204,14 @@ class Board(threading.Thread):
       if abort:
         abort_regular_execution = True
       if not delete:
-        self._listeners.append(l)
+        self._listeners[token_type].append(l)
     self._listeners_lock.release()
     if abort_regular_execution:
       return True
     if token_type == 'ERROR':
+      self.errors.append(token['message'])
+      return True
+    if token_type == 'STRING_MESSAGE':
       self.errors.append(token['message'])
       return True
     if token_type == 'RESERVED_COMMAND':
@@ -174,40 +222,94 @@ class Board(threading.Thread):
       self.firmware_name = token['name']
       return True
     if token_type == 'ANALOG_MAPPING_RESPONSE':
-      self.analog_channels = token['channels']
+      self.dtoa_map = token['channels']
+      self.atod_map = []
+      map_dict = {}
+      for i in xrange(len(self.dtoa_map)):
+        if self.dtoa_map[i] is not False:
+          map_dict[self.dtoa_map[i]] = i
+      for k in sorted(map_dict.keys()):
+        self.atod_map.append(map_dict[k])
       return True
     if token_type == 'CAPABILITY_RESPONSE':
       self.pin_config = token['pins']
       return True
     if token_type == 'ANALOG_MESSAGE':
-      self.pin_state['A%s' % token['pin']] = token['value']
+      pin = self.atod_map[token['pin']]
+      self.pin_state[pin] = token['value']
       return True
     if token_type == 'DIGITAL_MESSAGE':
-      for pin in xrange(1, len(token['pins'])+1):
-        self.pin_state['%s:%s' % (token['port'], pin)] = token['pins'][pin-1]
+      for pin in xrange(8):
+        self.pin_state[token['port'] * 8 + pin] = token['pins'][pin]
       return True
     if token_type == 'PROTOCOL_VERSION':
       self.firmware_version = '%s.%s' % (token['major'], token['minor'])
       return True
     if token_type == 'PIN_STATE_RESPONSE':
-      if token['mode'] == MODE_ANALOG:
-        token['pin'] = 'A%s' % token['pin']
-      else:
-        pin_nr = token['pin']
-        pin = pin_nr % 16
-        port = (pin_nr - pin) / 16
-        token['pin'] = '%s:%s' % (port, pin)
       self.pin_state[token['pin']] = token['data']
+      self.pin_mode[token['pin']] = token['mode']
       return True
     self.errors.append('Unable to dispatch token: %s' % (repr(token)))
     return False
 
-  def SendSysex(self, cmd, data):
-    self.port.writer.q.put([SE_START_SYSEX, cmd] + data + [SE_END_SYSEX])
+  def SendSysex(self, cmd, data=None):
+    if data:
+      self.port.writer.q.put([SYSEX_START, cmd] + data + [SYSEX_END])
+    else:
+      self.port.writer.q.put([SYSEX_START, cmd, SYSEX_END])
 
-  def I2CConfig(self, delay):
-    self.SendSysex(SE_I2C_CONFIG, [delay])
+  def I2CConfig(self, delay=0):
+    # Set all I2C capable pins to I2C mode, there is no way to specify which to use.
+    for i in xrange(len(self.pin_config)):
+      if self.pin_config[i].has_key(MODE_I2C):
+        self.pin_mode[i] = MODE_I2C
+    self.SendSysex(SE_I2C_CONFIG, encodeSequence([delay]))
     return self._i2c_device
+
+  def QueryBoardCapabilitiesAndState(self, wait=True):
+    """ Query the board capabilities and state."""
+    if not wait:
+      self.QueryCapabilities()
+      self.QueryAnalogMapping()
+      for i in xrange(len(self.pin_config)):
+        self.QueryPinState(i)
+    else:
+      query_lock = threading.Condition()
+      query_lock.acquire()
+
+      def QueryResponseListener(token):
+        query_lock.acquire()
+        query_lock.notify_all()
+        query_lock.release()
+        return (True, False)
+
+      self.AddListener('CAPABILITY_RESPONSE', QueryResponseListener)
+      self.QueryCapabilities()
+      query_lock.wait()
+      self.AddListener('ANALOG_MAPPING_RESPONSE', QueryResponseListener)
+      self.QueryAnalogMapping()
+      query_lock.wait()
+      for i in xrange(len(self.pin_config)):
+        self.AddListener('PIN_STATE_RESPONSE', QueryResponseListener)
+        self.QueryPinState(i)
+        query_lock.wait()
+      query_lock.release()
+
+  def QueryPinState(self, pin):
+    assert 0 <= pin < len(self.pin_config)
+    self.SendSysex(SE_PIN_STATE_QUERY, [pin])
+
+  def QueryCapabilities(self):
+    self.SendSysex(SE_CAPABILITY_QUERY)
+
+  def QueryProtocolVersion(self):
+    self.port.writer.q.put([PROTOCOL_VERSION])
+
+  def QueryFirmwareVersionAndString(self):
+    self.SendSysex(SE_REPORT_FIRMWARE)
+
+  def QueryAnalogMapping(self):
+    self.SendSysex(SE_ANALOG_MAPPING_QUERY)
 
   def run(self):
     """Reads tokens as they come in, and dispatches them appropriately. If an error occurs, the thread terminates."""
@@ -219,6 +321,66 @@ class Board(threading.Thread):
         continue
       if not token or not self.DispatchToken(token):
         break
+
+  def digitalWrite(self, pin, value):
+    assert value == 0 or value == 1
+    self.pin_state[pin] = value
+    port = pin / 8
+    state = 0
+    for i in range(8):
+      pin_nr = port * 8 + i
+      # TODO: can we send a digitalWrite to an analog pin to enable the pullup?
+      if self.pin_mode[pin_nr] == MODE_INPUT or self.pin_mode[pin_nr] == MODE_OUTPUT:
+        state |= (self.pin_state[pin_nr] & 0x01) << i
+    self.port.writer.q.put([DIGITAL_MESSAGE + port, state & 0x7f, state >> 7])
+
+  def digitalRead(self, pin):
+    assert 0 <= pin < len(self.pin_config)
+    assert self.pin_mode[pin] == MODE_INPUT
+    return self.pin_state[pin]
+
+  def pinMode(self, pin, mode):
+    assert 0 <= mode <= MODE_MAX
+    assert 0 <= pin < len(self.pin_config)
+    assert self.pin_config[pin].has_key(mode)
+    self.pin_mode[pin] = mode
+    self.port.writer.q.put([SET_PIN_MODE, pin, mode])
+
+  def analogWrite(self, pin, value):
+    assert 0 <= pin < len(self.pin_config)
+    assert 0 <= value <= 255
+    if self.pin_mode[pin] != MODE_PWM:
+      self.pinMode(pin, MODE_PWM)
+    self.port.writer.q.put([ANALOG_MESSAGE + pin, value % 128, value >> 7])
+
+  def analogRead(self, pin):
+    pin = self.atod_map[pin]
+    assert self.pin_config[pin][MODE_ANALOG]
+    return self.pin_state[pin]
+
+  def EnableAnalogReporting(self, pin):
+    assert 0 <= pin <= len(self.atod_map)
+    self.port.writer.q.put([REPORT_ANALOG + pin, 1])
+
+  def DisableAnalogReporting(self, pin):
+    assert 0 <= pin <= len(self.atod_map)
+    self.port.writer.q.put([REPORT_ANALOG + pin, 0])
+
+  def EnableDigitalReporting(self, port):
+    assert 0 <= port <= len(self.pin_config) / 8 + 1
+    self.port.writer.q.put([REPORT_DIGITAL + port, 1])
+
+  def DisableDigitalReporting(self, port):
+    assert 0 <= port <= len(self.pin_config) / 8 + 1
+    self.port.writer.q.put([REPORT_DIGITAL + port, 0])
+
+  def SetSamplingInterval(self, interval=19):
+    """Set the sampling interval in ms.
+    
+    Args:
+      interval: sampling interval in ms.  Default is 19.
+    """
+    self.SendSysex(SE_SAMPLING_INTERVAL, encodeSequence([interval]))
 
 
 def FirmataInit(port, baud=57600, log_to_file=None):
@@ -232,6 +394,8 @@ def FirmataInit(port, baud=57600, log_to_file=None):
   Returns:
     A Board object which implements the firmata protocol over the specified serial port.
   """
-  return Board(port, baud, log_to_file=log_to_file, start_serial=True)
+  board = Board(port, baud, log_to_file=log_to_file, start_serial=True)
+  board.QueryBoardCapabilitiesAndState()
+  return board
 
 __all__ = ['FirmataInit', 'Board', 'SerialPort'] + CONST_R.values()

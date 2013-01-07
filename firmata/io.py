@@ -176,16 +176,16 @@ class SerialReader(threading.Thread):
   def lexI2cReply(self):
     rune_lsb = self.Next()
     rune_msb = self.Next()
-    addr = chr((rune_msb << 7) + rune_lsb)
+    addr = (rune_msb << 7) + rune_lsb
     rune_lsb = self.Next()
     rune_msb = self.Next()
-    reg = chr((rune_msb << 7) + rune_lsb)
+    reg = (rune_msb << 7) + rune_lsb
 
     rune_lsb = self.Next()
     data = []
     while rune_lsb != SYSEX_END:
       rune_msb = self.Next()
-      data.append(chr((rune_msb << 7) + rune_lsb))
+      data.append((rune_msb << 7) + rune_lsb)
       rune_lsb = self.Next()
     self.Emit(dict(token='I2C_REPLY', addr=addr, reg=reg, data=data))
     return self.lexInitial
@@ -205,8 +205,10 @@ class SerialReader(threading.Thread):
       return self.lexI2cReply
     if command == SE_REPORT_FIRMWARE:
       return self.lexReportFirmware
-    return self.Error('State Sysex could not determine where to go from here given rune %s (%s)' % (hex(rune),
-        CONST_R.get(rune, 'UNKNOWN')))
+    if command == SE_STRING_DATA:
+      return self.lexStringData
+    return self.Error('State Sysex could not determine where to go from here given rune %s (%s)' % (hex(command),
+        CONST_R.get(command, 'UNKNOWN')))
 
   def lexAnalogMessage(self):
     command, lsb, msb = self.Next(False), self.Next(), self.Next()
@@ -217,7 +219,7 @@ class SerialReader(threading.Thread):
     command, lsb, msb = self.Next(False), self.Next(), self.Next()
     bitmask = (msb << 7) + lsb
     token_dict = dict(token='DIGITAL_MESSAGE', port=(command-0x90), pins=[])
-    for pin_num in xrange(14):
+    for pin_num in xrange(8):
       token_dict['pins'].append((bitmask % 2) == 1)
       bitmask = bitmask >> 1
     self.Emit(token_dict)
@@ -226,6 +228,16 @@ class SerialReader(threading.Thread):
   def lexProtocolVersion(self):
     major, minor = self.Next(), self.Next()
     self.Emit(dict(token='PROTOCOL_VERSION', major=major, minor=minor))
+    return self.lexInitial
+
+  def lexStringData(self):
+    message = ""
+    char_lsb = self.Next()
+    while char_lsb != SYSEX_END:
+      char_msb = self.Next()
+      message += chr(char_lsb + (char_msb << 7))
+      char_lsb = self.Next()
+    self.Emit(dict(token='STRING_MESSAGE', message=message))
     return self.lexInitial
 
   def lexInitial(self):
