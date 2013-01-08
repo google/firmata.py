@@ -133,22 +133,18 @@ class LexerTest(unittest.TestCase):
     self.assertEqual(dict(token='REPORT_FIRMWARE', major=5, minor=2, name='Test'), reader.q.get())
 
   def test_Mondo(self):
-    return #temporarily disabled 
     self._port.data = FIRMATA_INIT[:] + ARDUINO_CAPABILITY[:] + ARDUINO_ANALOG_MAPPING[:] + MONDO_DATA[:]
     board = firmata.Board('', 10, log_to_file=None, start_serial=True)
     board.join(timeout=1)
     board.StopCommunications()
     self.assertEqual(len(board.errors), 1)
     self.assertIn('RESERVED_COMMAND', board.errors[0])
-    self.assertIn({0:1}, board.pin_config)
-    self.assertIn({1:1}, board.pin_config)
-    self.assertEqual(2, len(board.pin_config))
-    self.assertEqual([0,1,False], board.analog_channels)
+    self.assertIn({0: 1, 1: 1, 4: 14}, board.pin_config)
+    self.assertEqual(20, len(board.pin_config))
     self.assertEqual('5.2', board.firmware_version)
     self.assertEqual('Test', board.firmware_name)
-    self.assertEqual(board.pin_state['A0'], 35)
+    self.assertEqual(board.pin_state[13], 35)
     self.assertEqual(board.pin_state[2], True)
-    self.assertEqual(board.pin_state['1:15'], 257)
 
 class FirmataTest(unittest.TestCase):
   def setUp(self):
