@@ -234,15 +234,20 @@ class FirmataTest(unittest.TestCase):
 
   def test_I2CRead(self):
     """Test simple I2C read query is properly sent and reply lexxed"""
-    self._port.data = FIRMATA_INIT[:] + ARDUINO_CAPABILITY[:] + ARDUINO_ANALOG_MAPPING[:] + ARDUINO_BOARD_STATE[:] + I2C_REPLY_MESSAGE[:]
+    self._port.data = FIRMATA_INIT[:] + ARDUINO_CAPABILITY[:] + ARDUINO_ANALOG_MAPPING[:] + ARDUINO_BOARD_STATE[:]
     board = firmata.Board('', 10, log_to_file=None, start_serial=True)
     board.I2CConfig(0)
+    old_sysex = board.SendSysex
+    def FakeSysex(*args, **kargs):
+      self._port.data.extend(I2C_REPLY_MESSAGE[:])
+      old_sysex(*args, **kargs)
+    board.SendSysex = FakeSysex
     reply = board._i2c_device.I2CRead(0x4f, 0x00, 2) # read 2 bytes from register 0
     board.join(timeout=1)
     board.StopCommunications()
     #                            |    i2c config      |   | start | addr  |  reg  |   2   | end
     assert self._port.output == ['\xf0\x78\x00\x00\xf7', '\xf0\x76\x4f\x08\x00\x00\x02\x00\xf7']
-    assert reply == I2C_REPLY_DICT['data']
+    self.assertEqual(reply, I2C_REPLY_DICT['data'])
 
   def test_I2CWriteSend(self):
     """Test simple I2C write query is properly sent"""

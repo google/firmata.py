@@ -10,6 +10,7 @@ go to space today if you create more than on on the same serial port.
 """
 
 import collections
+import logging
 from Queue import Queue, Empty
 import threading
 import time
@@ -60,11 +61,16 @@ class I2CDevice(object):
   """
   def __init__(self, board):
     """Construct an I2CDevice and add a listener."""
-    self.replies = Queue()
+    self.replies = dict()
+    self.update_event = threading.Event()
     self._shutdown = False
     self._board = board
     def I2CListener(token):
-      self.replies.put(token)
+      addr = token['addr']
+      if addr not in self.replies:
+        self._board.logger.warning('I2C: Unexpected message from address %s.' % addr)
+      self.replies[addr] = token
+      self.update_event.set()
       return (False, True)
     self._board.AddListener('I2C_REPLY', I2CListener)
 
@@ -81,6 +87,7 @@ class I2CDevice(object):
     if reg is not None:
       message += encodeSequence([reg])
     message += encodeSequence(data)
+    self.replies.setdefault(addr, None)
     self._board.SendSysex(SE_I2C_REQUEST, message)
 
   def I2CRead(self, addr, reg, count, timeout=1):
@@ -100,16 +107,21 @@ class I2CDevice(object):
     if reg is not None:
       message += encodeSequence([reg])
     message += encodeSequence([count])
+    self.replies[addr] = None
     self._board.SendSysex(SE_I2C_REQUEST, message)
     receieved = []
-    start_t = time.time()
-    try:
-      token = self.replies.get(timeout=timeout)
-      assert token['addr'] == addr
-      assert token['reg'] == reg
-      return token['data']
-    except Empty:
-      return None
+    end_t = time.time() + timeout
+    while True:
+      self.update_event.clear()
+      token = self.replies[addr]
+      if token:
+        assert token['addr'] == addr
+        assert token['reg'] == reg
+        return token['data']
+      remaining = end_t - time.time()
+      if remaining <= 0:
+        return None
+      self.update_event.wait(timeout=remaining)
 
 
 class Board(threading.Thread):
@@ -122,6 +134,7 @@ class Board(threading.Thread):
       log_to_file: A string specifying the file to log serial events to, or None (the default) for no logging.
       start_serial: If True, starts the serial IO thread right away. Default: False.
     """
+    self.logger = logging.getLogger()
     self.port = SerialPort(port=port, baud=baud, log_to_file=log_to_file, start_serial=start_serial)
     self.shutdown = False
     self.firmware_version = 'Unknown'
@@ -376,7 +389,7 @@ class Board(threading.Thread):
 
   def SetSamplingInterval(self, interval=19):
     """Set the sampling interval in ms.
-    
+
     Args:
       interval: sampling interval in ms.  Default is 19.
     """
