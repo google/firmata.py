@@ -125,7 +125,7 @@ class I2CDevice(object):
 
 
 class Board(threading.Thread):
-  def __init__(self, port, baud, log_to_file=None, start_serial=False):
+  def __init__(self, port, baud, log_to_file=None, start_serial=False, query_version=False):
     """Board object constructor. Should not be called directly.
 
     Args:
@@ -133,6 +133,8 @@ class Board(threading.Thread):
       baud: A number representing the baud rate to use for serial communication.
       log_to_file: A string specifying the file to log serial events to, or None (the default) for no logging.
       start_serial: If True, starts the serial IO thread right away. Default: False.
+      query_version: A boolean. If set, commands requesting firmware version are sent instead of depending on the board
+                     to reset on USB connect.
     """
     self.logger = logging.getLogger()
     self.port = SerialPort(port=port, baud=baud, log_to_file=log_to_file, start_serial=start_serial)
@@ -150,13 +152,18 @@ class Board(threading.Thread):
     self._i2c_device = I2CDevice(self)
     super(Board, self).__init__()
     if start_serial:
-      self.StartCommunications()
+      self.StartCommunications(query_version=query_version)
 
   def __del__(self):
     self.StopCommunications()
 
   def StartCommunications(self, query_version=False):
-    """Starts all the threads needed to communicate with the physical board."""
+    """Starts all the threads needed to communicate with the physical board.
+
+    Args:
+      query_version: A boolean. If set, commands requesting firmware version are sent instead of depending on the board
+                     to reset on USB connect.
+    """
     wait_for_serial = False
     if self.firmware_name == 'Unknown':
       wait_for_serial = threading.Condition()
@@ -399,18 +406,20 @@ class Board(threading.Thread):
     self.SendSysex(SE_SAMPLING_INTERVAL, encodeSequence([interval]))
 
 
-def FirmataInit(port, baud=57600, log_to_file=None):
+def FirmataInit(port, baud=57600, log_to_file=None, query_version=False):
   """Instantiate a `Board` object for a given serial port.
 
   Args:
     port: The serial port to use. Expressed as either a string or an integer (see pyserial docs for more info.)
     baud: A number representing the baud rate to use for serial communication.
     log_to_file: A string specifying the file to log serial events to, or None (the default) for no logging.
+    query_version: A boolean. If set, commands requesting firmware version are sent instead of depending on the board
+                   to reset on USB connect.
 
   Returns:
     A Board object which implements the firmata protocol over the specified serial port.
   """
-  board = Board(port, baud, log_to_file=log_to_file, start_serial=True)
+  board = Board(port, baud, log_to_file=log_to_file, start_serial=True, query_version=query_version)
   board.QueryBoardCapabilitiesAndState()
   return board
 
