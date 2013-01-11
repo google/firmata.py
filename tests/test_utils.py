@@ -13,7 +13,7 @@ class UtilsTest(unittest.TestCase):
     pass
 
   def test_encodeSequence(self):
-    assert encodeSequence([255, 0, 36]) == [127, 1, 0, 0, 36, 0]
-  
+    self.assertEqual(encodeSequence([255, 0, 36]), [127, 1, 0, 0, 36, 0])
+
   def test_decodeSequence(self):
-    assert decodeSequence([127, 1, 0, 0, 36, 0]) == [255, 0, 36]
+    self.assertEqual(decodeSequence([127, 1, 0, 0, 36, 0]), [255, 0, 36])
