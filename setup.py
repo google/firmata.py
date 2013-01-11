@@ -13,7 +13,7 @@ def read(fname):
 
 setup(
   name = "firmata.py",
-  version = "0.2.1",
+  version = "0.2.2",
   author = "Silas Snider",
   author_email = "swsnider@gmail.com",
   description = ("An API wrapper for the firmata wire protocol."),
