@@ -152,6 +152,9 @@ class Board(threading.Thread):
     if start_serial:
       self.StartCommunications()
 
+  def __del__(self):
+    self.StopCommunications()
+
   def StartCommunications(self, query_version=False):
     """Starts all the threads needed to communicate with the physical board."""
     wait_for_serial = False

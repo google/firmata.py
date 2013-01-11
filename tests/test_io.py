@@ -108,6 +108,9 @@ class MockSerial(object):
   def flushOutput(self):
     pass
 
+  def close(self):
+    pass
+
 class LexerTest(unittest.TestCase):
   def setUp(self):
     super(LexerTest, self).setUp()

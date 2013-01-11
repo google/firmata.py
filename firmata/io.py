@@ -310,3 +310,7 @@ class SerialPort(object):
     if self._logger:
       self._logger.q.put(None)
       self._logger.join()
+    self._port.close()
+    del self.writer
+    del self.reader
+    del self._logger
