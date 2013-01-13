@@ -12,6 +12,7 @@ go to space today if you create more than on on the same serial port.
 import collections
 import logging
 from Queue import Queue, Empty
+import sys
 import threading
 import time
 
@@ -136,6 +137,7 @@ class Board(threading.Thread):
       query_version: A boolean. If set, commands requesting firmware version are sent instead of depending on the board
                      to reset on USB connect.
     """
+    logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
     self.logger = logging.getLogger()
     self.port = SerialPort(port=port, baud=baud, log_to_file=log_to_file, start_serial=start_serial)
     self.shutdown = False
